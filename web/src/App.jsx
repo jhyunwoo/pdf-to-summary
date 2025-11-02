@@ -23,7 +23,7 @@ const AI_TIMEOUT = 600000; // 10분 (AI 분석)
 const fetchWithTimeout = async (url, options = {}, timeout = FETCH_TIMEOUT) => {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), timeout);
-  
+
   try {
     const response = await fetch(url, {
       ...options,
@@ -33,7 +33,7 @@ const fetchWithTimeout = async (url, options = {}, timeout = FETCH_TIMEOUT) => {
     return response;
   } catch (error) {
     clearTimeout(timeoutId);
-    if (error.name === 'AbortError') {
+    if (error.name === "AbortError") {
       throw new Error(`요청 시간 초과 (${timeout / 1000}초)`);
     }
     throw error;
@@ -79,24 +79,28 @@ function PDFDropzone({
         const isPdf =
           f.type === "application/pdf" || f.name.toLowerCase().endsWith(".pdf");
         const okSize = f.size <= maxBytes;
-        
+
         if (!isPdf) {
           rejected.push(`${f.name}: PDF만 업로드 가능합니다.`);
           return;
         }
         if (!okSize) {
-          rejected.push(`${f.name}: ${maxSizeMB}MB를 초과합니다 (현재: ${(f.size / 1024 / 1024).toFixed(2)}MB).`);
+          rejected.push(
+            `${f.name}: ${maxSizeMB}MB를 초과합니다 (현재: ${(f.size / 1024 / 1024).toFixed(2)}MB).`,
+          );
           return;
         }
         if (f.size === 0) {
           rejected.push(`${f.name}: 파일이 비어있습니다.`);
           return;
         }
-        
+
         accepted.push(f);
       });
 
-      let newFiles = multiple ? [...(Array.isArray(value) ? value : []), ...accepted] : accepted.slice(0, 1);
+      let newFiles = multiple
+        ? [...(Array.isArray(value) ? value : []), ...accepted]
+        : accepted.slice(0, 1);
 
       // 중복 제거 (name + size + lastModified)
       const seen = new Set();
@@ -108,10 +112,10 @@ function PDFDropzone({
         return true;
       });
 
-      if (typeof onFilesChange === 'function') {
+      if (typeof onFilesChange === "function") {
         onFilesChange(newFiles);
       }
-      
+
       setError(rejected.length > 0 ? rejected.join("\n") : "");
     },
     [value, onFilesChange, multiple, maxSizeMB],
@@ -145,13 +149,13 @@ function PDFDropzone({
   };
 
   const removeAt = (idx) => {
-    if (typeof onFilesChange === 'function' && Array.isArray(value)) {
+    if (typeof onFilesChange === "function" && Array.isArray(value)) {
       onFilesChange(value.filter((_, i) => i !== idx));
     }
   };
-  
+
   const clearAll = () => {
-    if (typeof onFilesChange === 'function') {
+    if (typeof onFilesChange === "function") {
       onFilesChange([]);
     }
   };
@@ -225,7 +229,7 @@ function PDFDropzone({
           <ul className="space-y-2">
             {value.map((f, idx) => {
               if (!f || !f.name) return null;
-              
+
               return (
                 <li
                   key={`file-${f.name}-${f.lastModified}-${idx}`}
@@ -266,32 +270,37 @@ function App() {
   const [convertResults, setConvertResults] = useState([]);
   const [analyzing, setAnalyzing] = useState(false);
   const [analysisResults, setAnalysisResults] = useState([]);
-  const [analysisProgress, setAnalysisProgress] = useState({ current: 0, total: 0, step: 0, totalSteps: 0 });
+  const [analysisProgress, setAnalysisProgress] = useState({
+    current: 0,
+    total: 0,
+    step: 0,
+    totalSteps: 0,
+  });
   const [isLoadingPrompts, setIsLoadingPrompts] = useState(false); // 초기 로드 플래그
   const [isSavingPrompts, setIsSavingPrompts] = useState(false); // 프롬프트 저장 중 플래그
 
   const handleSubmit = (e) => {
     try {
       e?.preventDefault();
-      
+
       if (!e?.currentTarget) {
         console.error("폼 요소를 찾을 수 없습니다");
         return;
       }
-      
+
       const fd = new FormData(e.currentTarget);
       const text = (fd.get("tok") || "").toString().trim();
-      
+
       if (!text) {
         e.currentTarget.reset();
         return;
       }
-      
+
       setTok((prev) => {
         const newTok = { prompt: text, withImage: Boolean(withImage) };
         return Array.isArray(prev) ? [...prev, newTok] : [newTok];
       });
-      
+
       e.currentTarget.reset();
     } catch (err) {
       console.error("프롬프트 추가 오류:", err);
@@ -307,11 +316,11 @@ function App() {
   };
 
   const handleRemove = (idxToRemove) => {
-    if (typeof idxToRemove !== 'number' || idxToRemove < 0) {
+    if (typeof idxToRemove !== "number" || idxToRemove < 0) {
       console.error("유효하지 않은 인덱스:", idxToRemove);
       return;
     }
-    
+
     setTok((prev) => {
       if (!Array.isArray(prev)) return [];
       return prev.filter((_, idx) => idx !== idxToRemove);
@@ -321,9 +330,13 @@ function App() {
   // 프롬프트를 API에 저장하는 함수
   const savePrompts = useCallback(async (promptItems) => {
     setIsSavingPrompts(true);
-    
+
     try {
-      if (!promptItems || !Array.isArray(promptItems) || promptItems.length === 0) {
+      if (
+        !promptItems ||
+        !Array.isArray(promptItems) ||
+        promptItems.length === 0
+      ) {
         // 빈 배열인 경우에도 저장 (전체 삭제)
         try {
           await fetch(`${API_BASE}/prompts`, {
@@ -343,18 +356,18 @@ function App() {
 
       // 전체 프롬프트 객체를 정제하여 저장 (withImage 정보 포함)
       const promptsToSave = promptItems
-        .map(item => {
+        .map((item) => {
           if (!item) return null;
-          
+
           // 문자열인 경우
-          if (typeof item === 'string') {
+          if (typeof item === "string") {
             const trimmed = item.trim();
             if (!trimmed) return null;
             return { prompt: trimmed, withImage: true };
           }
-          
+
           // 객체인 경우
-          if (typeof item === 'object' && 'prompt' in item) {
+          if (typeof item === "object" && "prompt" in item) {
             const promptText = String(item.prompt || "").trim();
             if (!promptText) return null;
             return {
@@ -362,14 +375,14 @@ function App() {
               withImage: Boolean(item.withImage ?? true),
             };
           }
-          
+
           return null;
         })
         .filter((p) => p !== null);
 
       console.log(`💾 프롬프트 저장 중... (${promptsToSave.length}개)`);
       console.log(`저장할 프롬프트:`, promptsToSave);
-      
+
       const resp = await fetch(`${API_BASE}/prompts`, {
         method: "POST",
         headers: {
@@ -401,7 +414,7 @@ function App() {
     try {
       setIsLoadingPrompts(true);
       console.log("📥 저장된 프롬프트 불러오는 중...");
-      
+
       const resp = await fetch(`${API_BASE}/prompts`, {
         method: "GET",
         headers: {
@@ -421,26 +434,26 @@ function App() {
         const loadedPrompts = result.prompts
           .map((p) => {
             // 문자열 형식 (하위 호환성)
-            if (typeof p === 'string') {
+            if (typeof p === "string") {
               const trimmed = p.trim();
               return trimmed ? { prompt: trimmed, withImage: true } : null;
             }
-            
+
             // 객체 형식: { prompt: string, withImage: boolean }
-            if (p && typeof p === 'object' && 'prompt' in p) {
+            if (p && typeof p === "object" && "prompt" in p) {
               const promptText = String(p.prompt || "").trim();
               if (!promptText) return null;
-              
+
               return {
                 prompt: promptText,
                 withImage: Boolean(p.withImage ?? true),
               };
             }
-            
+
             return null;
           })
           .filter((p) => p !== null);
-        
+
         if (loadedPrompts.length > 0) {
           console.log(`✅ 프롬프트 ${loadedPrompts.length}개 불러옴`);
           console.log(`불러온 프롬프트:`, loadedPrompts);
@@ -488,15 +501,21 @@ function App() {
 
     const url = `${API_BASE}/upload/${encodeURIComponent(file.name)}`;
     try {
-      console.log(`📤 업로드 시작: ${file.name} (${(file.size / 1024 / 1024).toFixed(2)} MB)`);
-      
-      const resp = await fetchWithTimeout(url, {
-        method: "PUT",
-        headers: {
-          "Content-Type": "application/pdf",
+      console.log(
+        `📤 업로드 시작: ${file.name} (${(file.size / 1024 / 1024).toFixed(2)} MB)`,
+      );
+
+      const resp = await fetchWithTimeout(
+        url,
+        {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/pdf",
+          },
+          body: file,
         },
-        body: file,
-      }, 180000); // PDF 업로드는 3분 타임아웃
+        180000,
+      ); // PDF 업로드는 3분 타임아웃
 
       let json = {};
       try {
@@ -518,7 +537,9 @@ function App() {
       if (!resp.ok || !json?.ok) {
         return {
           ok: false,
-          error: json?.error || `업로드 실패 (${resp.status}${resp.statusText ? ': ' + resp.statusText : ''})`,
+          error:
+            json?.error ||
+            `업로드 실패 (${resp.status}${resp.statusText ? ": " + resp.statusText : ""})`,
           filename: file.name,
         };
       }
@@ -533,15 +554,16 @@ function App() {
     } catch (err) {
       console.error(`업로드 오류 (${file.name}):`, err);
       let errorMessage = "네트워크 오류";
-      
+
       if (err.message?.includes("시간 초과")) {
-        errorMessage = "업로드 시간 초과 - 파일이 너무 크거나 네트워크가 느립니다.";
+        errorMessage =
+          "업로드 시간 초과 - 파일이 너무 크거나 네트워크가 느립니다.";
       } else if (err.message?.includes("Failed to fetch")) {
         errorMessage = "서버에 연결할 수 없습니다. 네트워크를 확인해주세요.";
       } else if (err.message) {
         errorMessage = err.message;
       }
-      
+
       return {
         ok: false,
         error: errorMessage,
@@ -552,7 +574,7 @@ function App() {
 
   // PDF를 JPG로 변환하는 함수
   const convertPdfToJpg = async (pdfKey, filename) => {
-    if (!pdfKey || typeof pdfKey !== 'string') {
+    if (!pdfKey || typeof pdfKey !== "string") {
       return {
         ok: false,
         error: "유효하지 않은 PDF 키입니다.",
@@ -564,7 +586,7 @@ function App() {
     try {
       // PDF URL 생성 (R2에서 직접 접근 가능한 URL)
       const pdfUrl = `${STORAGE_BASE}/${pdfKey}`;
-      
+
       // 이미지 업로드 URL (PUT 방식)
       const uploadUrl = `${API_BASE}/upload-image`;
 
@@ -572,16 +594,20 @@ function App() {
       console.log(`PDF URL: ${pdfUrl}`);
 
       // PDF to JPG API 호출
-      const resp = await fetchWithTimeout(`${PDF_TO_JPG_API}/convert`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
+      const resp = await fetchWithTimeout(
+        `${PDF_TO_JPG_API}/convert`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            pdfUrl,
+            uploadUrl,
+          }),
         },
-        body: JSON.stringify({
-          pdfUrl,
-          uploadUrl,
-        }),
-      }, 180000); // PDF 변환은 3분 타임아웃
+        180000,
+      ); // PDF 변환은 3분 타임아웃
 
       let json = {};
       try {
@@ -602,7 +628,10 @@ function App() {
       if (!resp.ok) {
         return {
           ok: false,
-          error: json?.error || json?.message || `변환 실패 (${resp.status}${resp.statusText ? ': ' + resp.statusText : ''})`,
+          error:
+            json?.error ||
+            json?.message ||
+            `변환 실패 (${resp.status}${resp.statusText ? ": " + resp.statusText : ""})`,
           filename,
           pdfKey,
         };
@@ -619,18 +648,18 @@ function App() {
       }
 
       // 업로드된 이미지 URL들을 추출
-      console.log('\n📸 이미지 URL 추출 시작...');
-      console.log('PDF to JPG API 응답:', json);
-      
+      console.log("\n📸 이미지 URL 추출 시작...");
+      console.log("PDF to JPG API 응답:", json);
+
       const imageUrls = [];
       if (json.results && Array.isArray(json.results)) {
         for (const result of json.results) {
-          console.log(`\n페이지 ${result.page || '?'} 처리:`, result);
-          
-          if (result.status === 'success') {
+          console.log(`\n페이지 ${result.page || "?"} 처리:`, result);
+
+          if (result.status === "success") {
             // PDF to JPG API가 반환한 응답 객체에서 URL 추출
             let imageUrl = null;
-            
+
             // 응답 객체에 response가 있고 그 안에 url이 있는 경우
             if (result.response && result.response.url) {
               imageUrl = result.response.url;
@@ -644,7 +673,9 @@ function App() {
             // response 객체에 key가 있는 경우
             else if (result.response && result.response.key) {
               imageUrl = `${STORAGE_BASE}/${result.response.key}`;
-              console.log(`  ✓ response.key 사용: ${result.response.key} → ${imageUrl}`);
+              console.log(
+                `  ✓ response.key 사용: ${result.response.key} → ${imageUrl}`,
+              );
             }
             // 직접 key 필드가 있는 경우
             else if (result.key) {
@@ -654,30 +685,32 @@ function App() {
             // imageKey 필드가 있는 경우
             else if (result.imageKey) {
               imageUrl = `${STORAGE_BASE}/${result.imageKey}`;
-              console.log(`  ✓ imageKey 사용: ${result.imageKey} → ${imageUrl}`);
+              console.log(
+                `  ✓ imageKey 사용: ${result.imageKey} → ${imageUrl}`,
+              );
             }
-            
+
             if (imageUrl) {
               imageUrls.push(imageUrl);
               console.log(`  ✅ 추가됨: ${imageUrl}`);
             } else {
-              console.warn('  ⚠️ 이미지 URL을 찾을 수 없음:', result);
+              console.warn("  ⚠️ 이미지 URL을 찾을 수 없음:", result);
             }
           } else {
             console.warn(`  ❌ 상태가 success가 아님: ${result.status}`);
           }
         }
       }
-      
+
       console.log(`\n✅ 총 ${imageUrls.length}개 이미지 URL 추출 완료`);
-      console.log('📋 최종 이미지 URLs:');
+      console.log("📋 최종 이미지 URLs:");
       imageUrls.forEach((url, idx) => {
         console.log(`  ${idx + 1}. ${url}`);
       });
 
       // 이미지가 하나도 추출되지 않은 경우 경고
       if (imageUrls.length === 0) {
-        console.warn('⚠️ 이미지가 하나도 추출되지 않았습니다!');
+        console.warn("⚠️ 이미지가 하나도 추출되지 않았습니다!");
         return {
           ok: false,
           error: "변환은 완료되었지만 이미지 URL을 추출할 수 없습니다.",
@@ -698,16 +731,18 @@ function App() {
       };
     } catch (err) {
       console.error(`PDF 변환 오류 (${filename}):`, err);
-      
+
       let errorMessage = "네트워크 오류";
       if (err.message?.includes("시간 초과")) {
-        errorMessage = "PDF 변환 시간 초과 - PDF 파일이 너무 크거나 복잡합니다.";
+        errorMessage =
+          "PDF 변환 시간 초과 - PDF 파일이 너무 크거나 복잡합니다.";
       } else if (err.message?.includes("Failed to fetch")) {
-        errorMessage = "변환 서버에 연결할 수 없습니다. 네트워크를 확인해주세요.";
+        errorMessage =
+          "변환 서버에 연결할 수 없습니다. 네트워크를 확인해주세요.";
       } else if (err.message) {
         errorMessage = err.message;
       }
-      
+
       return {
         ok: false,
         error: errorMessage,
@@ -730,7 +765,7 @@ function App() {
   // AI 분석 함수 (Chain-of-Thought)
   const analyzeWithAI = async (imageUrls, promptItems) => {
     // promptItems: [{ prompt: string, withImage: boolean }, ...]
-    
+
     if (!promptItems || promptItems.length === 0) {
       return {
         ok: false,
@@ -739,7 +774,7 @@ function App() {
     }
 
     // 이미지가 필요한 프롬프트가 있는지 확인
-    const needsImage = promptItems.some(p => p.withImage);
+    const needsImage = promptItems.some((p) => p.withImage);
     if (needsImage && (!imageUrls || imageUrls.length === 0)) {
       return {
         ok: false,
@@ -754,10 +789,11 @@ function App() {
 
     try {
       const results = [];
-      
+
       // 이미지 URL이 없는 경우 (텍스트만 처리)
-      const processImageUrls = imageUrls && imageUrls.length > 0 ? imageUrls : [null];
-      
+      const processImageUrls =
+        imageUrls && imageUrls.length > 0 ? imageUrls : [null];
+
       // 각 이미지에 대해 분석 수행 (이미지가 없으면 1회만 실행)
       for (let imgIdx = 0; imgIdx < processImageUrls.length; imgIdx++) {
         // 진행 상황 업데이트
@@ -768,16 +804,18 @@ function App() {
           totalSteps: promptItems.length,
         });
         const imageUrl = processImageUrls[imgIdx];
-        
+
         if (imageUrl) {
-          console.log(`\n[페이지 ${imgIdx + 1}/${processImageUrls.length}] 분석 시작`);
+          console.log(
+            `\n[페이지 ${imgIdx + 1}/${processImageUrls.length}] 분석 시작`,
+          );
           console.log(`이미지 URL: ${imageUrl}`);
         } else {
           console.log(`\n[텍스트 전용 분석] 시작`);
         }
-        
+
         const pageResults = [];
-        
+
         try {
           // 이미지 URL 검증 (이미지가 있는 경우에만)
           if (imageUrl && !validateImageUrl(imageUrl)) {
@@ -786,37 +824,39 @@ function App() {
           if (imageUrl) {
             console.log(`이미지 URL 검증 완료: ${imageUrl}`);
           }
-          
+
           // Chain-of-Thought: 각 프롬프트를 순차적으로 실행
           let previousResponse = "";
-          
+
           for (let promptIdx = 0; promptIdx < promptItems.length; promptIdx++) {
             // 진행 상황 업데이트 (Step)
-            setAnalysisProgress(prev => ({
+            setAnalysisProgress((prev) => ({
               ...prev,
               step: promptIdx + 1,
             }));
-            
+
             const promptItem = promptItems[promptIdx];
             const { prompt, withImage: needsImage } = promptItem;
-            
-            console.log(`\n  [Step ${promptIdx + 1}/${promptItems.length}] 실행 중...`);
+
+            console.log(
+              `\n  [Step ${promptIdx + 1}/${promptItems.length}] 실행 중...`,
+            );
             console.log(`  프롬프트: ${prompt}`);
-            console.log(`  이미지 필요: ${needsImage ? 'Yes' : 'No'}`);
-            
+            console.log(`  이미지 필요: ${needsImage ? "Yes" : "No"}`);
+
             // 이전 응답이 있으면 프롬프트에 포함
             const enhancedPrompt = previousResponse
               ? `이전 분석 결과:\n${previousResponse}\n\n새로운 지시사항:\n${prompt}`
               : prompt;
-            
+
             if (previousResponse) {
               console.log(`  이전 결과 포함됨 (${previousResponse.length}자)`);
             }
-            
+
             // 엔드포인트 및 요청 데이터 결정
             let endpoint;
             let requestBody;
-            
+
             if (needsImage && imageUrl) {
               // 이미지와 함께 요청 (ImageUrlRequest)
               endpoint = `${AI_API}/api/generate`;
@@ -837,31 +877,39 @@ function App() {
               };
               console.log(`  엔드포인트: /api/generate/text (텍스트 전용)`);
             }
-            
+
             console.log(`  요청 데이터:`, requestBody);
-            
+
             // AI API 호출
             try {
-              const resp = await fetchWithTimeout(endpoint, {
-                method: "POST",
-                headers: {
-                  "Content-Type": "application/json",
+              const resp = await fetchWithTimeout(
+                endpoint,
+                {
+                  method: "POST",
+                  headers: {
+                    "Content-Type": "application/json",
+                  },
+                  body: JSON.stringify(requestBody),
                 },
-                body: JSON.stringify(requestBody),
-              }, AI_TIMEOUT);
-              
+                AI_TIMEOUT,
+              );
+
               console.log(`  API 응답 상태: ${resp.status} ${resp.statusText}`);
-              
+
               if (!resp.ok) {
                 let errorText = "";
                 let errorDetail = "";
-                
+
                 try {
                   const text = await resp.text();
                   if (text) {
                     try {
                       const errorJson = JSON.parse(text);
-                      errorText = errorJson.error || errorJson.message || errorJson.detail || text;
+                      errorText =
+                        errorJson.error ||
+                        errorJson.message ||
+                        errorJson.detail ||
+                        text;
                       errorDetail = JSON.stringify(errorJson);
                       console.error(`  API 오류 (JSON):`, errorJson);
                     } catch {
@@ -873,7 +921,7 @@ function App() {
                   console.error(`  응답 읽기 실패:`, readErr);
                   errorText = "응답을 읽을 수 없습니다";
                 }
-                
+
                 pageResults.push({
                   step: promptIdx + 1,
                   prompt,
@@ -883,7 +931,7 @@ function App() {
                 });
                 break; // 에러 발생 시 다음 프롬프트 실행 중단
               }
-              
+
               // 응답 파싱
               let aiResponse;
               try {
@@ -904,10 +952,10 @@ function App() {
                 break;
               }
               console.log(`  AI 응답 전체:`, aiResponse);
-              
+
               // 다양한 응답 형식 지원
               let responseText = "";
-              if (typeof aiResponse === 'string') {
+              if (typeof aiResponse === "string") {
                 // 직접 문자열인 경우
                 responseText = aiResponse;
               } else if (aiResponse.response) {
@@ -924,22 +972,28 @@ function App() {
                 responseText = aiResponse.output;
               } else if (aiResponse.data) {
                 // { data: "텍스트" } 또는 { data: { ... } }
-                responseText = typeof aiResponse.data === 'string' 
-                  ? aiResponse.data 
-                  : JSON.stringify(aiResponse.data);
+                responseText =
+                  typeof aiResponse.data === "string"
+                    ? aiResponse.data
+                    : JSON.stringify(aiResponse.data);
               } else {
                 // 알 수 없는 형식 - 전체를 문자열로 변환
                 responseText = JSON.stringify(aiResponse);
-                console.warn(`  예상치 못한 응답 형식, 전체를 문자열로 변환:`, aiResponse);
+                console.warn(
+                  `  예상치 못한 응답 형식, 전체를 문자열로 변환:`,
+                  aiResponse,
+                );
               }
-              
+
               previousResponse = responseText;
-              console.log(`  추출된 응답: ${previousResponse.substring(0, 100)}... (총 ${previousResponse.length}자)`);
-              
+              console.log(
+                `  추출된 응답: ${previousResponse.substring(0, 100)}... (총 ${previousResponse.length}자)`,
+              );
+
               if (!previousResponse) {
                 throw new Error("AI 응답이 비어있습니다.");
               }
-              
+
               pageResults.push({
                 step: promptIdx + 1,
                 prompt,
@@ -947,19 +1001,20 @@ function App() {
                 success: true,
                 response: previousResponse,
               });
-              
             } catch (apiErr) {
               console.error(`  API 호출 실패:`, apiErr);
-              
+
               let errorMessage = "API 호출 실패";
               if (apiErr.message?.includes("시간 초과")) {
-                errorMessage = "AI 분석 시간 초과 - 응답을 기다리는 중 시간이 초과되었습니다.";
+                errorMessage =
+                  "AI 분석 시간 초과 - 응답을 기다리는 중 시간이 초과되었습니다.";
               } else if (apiErr.message?.includes("Failed to fetch")) {
-                errorMessage = "AI 서버에 연결할 수 없습니다. 네트워크를 확인해주세요.";
+                errorMessage =
+                  "AI 서버에 연결할 수 없습니다. 네트워크를 확인해주세요.";
               } else if (apiErr.message) {
                 errorMessage = apiErr.message;
               }
-              
+
               pageResults.push({
                 step: promptIdx + 1,
                 prompt,
@@ -970,34 +1025,37 @@ function App() {
               break;
             }
           }
-          
+
           results.push({
             page: imgIdx + 1,
             imageUrl,
             steps: pageResults,
           });
-          
-          console.log(`[페이지 ${imgIdx + 1}] 분석 완료 (${pageResults.length}/${promptItems.length} 단계 성공)`);
-          
+
+          console.log(
+            `[페이지 ${imgIdx + 1}] 분석 완료 (${pageResults.length}/${promptItems.length} 단계 성공)`,
+          );
         } catch (imgErr) {
           console.error(`[페이지 ${imgIdx + 1}] 이미지 처리 실패:`, imgErr);
           results.push({
             page: imgIdx + 1,
             imageUrl,
-            steps: [{
-              step: 1,
-              prompt: promptItems[0].prompt,
-              withImage: promptItems[0].withImage,
-              success: false,
-              error: `이미지 처리 실패: ${imgErr.message}`,
-            }],
+            steps: [
+              {
+                step: 1,
+                prompt: promptItems[0].prompt,
+                withImage: promptItems[0].withImage,
+                success: false,
+                error: `이미지 처리 실패: ${imgErr.message}`,
+              },
+            ],
           });
         }
       }
-      
+
       console.log(`\n=== AI 분석 완료 ===`);
       console.log(`총 ${results.length}개 페이지 분석됨`);
-      
+
       return {
         ok: true,
         results,
@@ -1020,35 +1078,39 @@ function App() {
 
     try {
       let textContent = "# PDF AI 분석 결과\n\n";
-      textContent += `분석 일시: ${new Date().toLocaleString('ko-KR')}\n`;
+      textContent += `분석 일시: ${new Date().toLocaleString("ko-KR")}\n`;
       textContent += `총 ${analysisResults.length}개 파일 분석\n`;
       textContent += "=".repeat(80) + "\n\n";
 
       for (const result of analysisResults) {
         if (!result) continue;
-        
+
         textContent += `## 📄 ${result.filename || "파일"}\n`;
         textContent += `상태: ${result.ok ? "✅ 분석 완료" : "❌ 분석 실패"}\n\n`;
 
         if (result.ok && result.results && Array.isArray(result.results)) {
           for (const pageResult of result.results) {
             if (!pageResult) continue;
-            
+
             textContent += `### 📖 페이지 ${pageResult.page || "?"}\n\n`;
 
-            if (pageResult.steps && Array.isArray(pageResult.steps) && pageResult.steps.length > 0) {
+            if (
+              pageResult.steps &&
+              Array.isArray(pageResult.steps) &&
+              pageResult.steps.length > 0
+            ) {
               for (const step of pageResult.steps) {
                 if (!step) continue;
-                
+
                 const typeLabel = step.withImage ? "🖼️ 이미지" : "📝 텍스트";
                 textContent += `#### Step ${step.step || "?"} [${typeLabel}]: ${step.prompt || ""}\n\n`;
-                
+
                 if (step.success) {
                   textContent += `${step.response || "(응답 없음)"}\n\n`;
                 } else {
                   textContent += `❌ 오류: ${step.error || "알 수 없는 오류"}\n\n`;
                 }
-                
+
                 textContent += "-".repeat(60) + "\n\n";
               }
             }
@@ -1069,21 +1131,21 @@ function App() {
         alert("✅ 전체 결과가 클립보드에 복사되었습니다!");
       } catch (clipboardErr) {
         console.error("클립보드 복사 실패:", clipboardErr);
-        
+
         // Fallback: 텍스트 영역 생성하여 복사
         try {
-          const textarea = document.createElement('textarea');
+          const textarea = document.createElement("textarea");
           textarea.value = textContent;
-          textarea.style.position = 'fixed';
-          textarea.style.opacity = '0';
-          textarea.style.left = '-9999px';
+          textarea.style.position = "fixed";
+          textarea.style.opacity = "0";
+          textarea.style.left = "-9999px";
           document.body.appendChild(textarea);
           textarea.focus();
           textarea.select();
-          
-          const successful = document.execCommand('copy');
+
+          const successful = document.execCommand("copy");
           document.body.removeChild(textarea);
-          
+
           if (successful) {
             alert("✅ 전체 결과가 클립보드에 복사되었습니다!");
           } else {
@@ -1108,24 +1170,24 @@ function App() {
       alert("업로드할 PDF 파일을 선택해주세요.");
       return;
     }
-    
+
     if (uploading || converting || analyzing) {
       console.warn("이미 작업이 진행 중입니다.");
       return;
     }
-    
+
     // Chain-of-Thought 프롬프트 확인
     if (!tok || tok.length === 0) {
       alert("분석할 프롬프트를 추가해주세요.");
       return;
     }
-    
+
     console.log(`\n${"=".repeat(60)}`);
     console.log(`PDF 분석 프로세스 시작`);
     console.log(`PDF 파일 수: ${pdfs.length}`);
     console.log(`프롬프트 단계: ${tok.length}개`);
     console.log(`${"=".repeat(60)}\n`);
-    
+
     try {
       // 1단계: PDF 업로드
       console.log(`📤 [1/3] PDF 업로드 시작...`);
@@ -1136,19 +1198,25 @@ function App() {
       setAnalysisProgress({ current: 0, total: 0, step: 0, totalSteps: 0 });
 
       const uploadResultsList = await Promise.all(
-        pdfs.map(pdf => uploadOneToR2(pdf).catch(err => ({
-          ok: false,
-          error: `예외 발생: ${err.message}`,
-          filename: pdf?.name || "unknown",
-        })))
+        pdfs.map((pdf) =>
+          uploadOneToR2(pdf).catch((err) => ({
+            ok: false,
+            error: `예외 발생: ${err.message}`,
+            filename: pdf?.name || "unknown",
+          })),
+        ),
       );
-      
+
       setUploadResults(uploadResultsList);
       setUploading(false);
 
       // 업로드 성공한 항목만 필터링
-      const successfulUploads = uploadResultsList.filter(r => r && r.ok && r.key);
-      console.log(`✅ PDF 업로드 완료: ${successfulUploads.length}/${uploadResultsList.length} 성공`);
+      const successfulUploads = uploadResultsList.filter(
+        (r) => r && r.ok && r.key,
+      );
+      console.log(
+        `✅ PDF 업로드 완료: ${successfulUploads.length}/${uploadResultsList.length} 성공`,
+      );
 
       if (successfulUploads.length === 0) {
         alert("업로드된 PDF가 없습니다. 업로드 결과를 확인해주세요.");
@@ -1158,28 +1226,38 @@ function App() {
       // 2단계: PDF를 JPG로 변환
       console.log(`\n🖼️  [2/3] PDF → JPG 변환 시작...`);
       setConverting(true);
-      
+
       const conversionResults = await Promise.all(
-        successfulUploads.map(item => 
-          convertPdfToJpg(item.key, item.filename).catch(err => ({
+        successfulUploads.map((item) =>
+          convertPdfToJpg(item.key, item.filename).catch((err) => ({
             ok: false,
             error: `예외 발생: ${err.message}`,
             filename: item.filename,
             pdfKey: item.key,
-          }))
-        )
+          })),
+        ),
       );
-      
+
       setConvertResults(conversionResults);
       setConverting(false);
 
       // 변환 성공한 항목만 필터링
       const successfulConversions = conversionResults.filter(
-        r => r && r.ok && r.imageUrls && Array.isArray(r.imageUrls) && r.imageUrls.length > 0
+        (r) =>
+          r &&
+          r.ok &&
+          r.imageUrls &&
+          Array.isArray(r.imageUrls) &&
+          r.imageUrls.length > 0,
       );
-      
-      const totalImages = successfulConversions.reduce((sum, r) => sum + (r.imageUrls?.length || 0), 0);
-      console.log(`✅ JPG 변환 완료: ${successfulConversions.length}/${conversionResults.length} 파일 성공`);
+
+      const totalImages = successfulConversions.reduce(
+        (sum, r) => sum + (r.imageUrls?.length || 0),
+        0,
+      );
+      console.log(
+        `✅ JPG 변환 완료: ${successfulConversions.length}/${conversionResults.length} 파일 성공`,
+      );
       console.log(`   총 ${totalImages}개 이미지 생성됨`);
 
       if (successfulConversions.length === 0) {
@@ -1207,9 +1285,11 @@ function App() {
           });
           continue;
         }
-        
-        console.log(`\n--- 파일: ${conversion.filename} (${conversion.imageUrls.length}개 페이지) ---`);
-        
+
+        console.log(
+          `\n--- 파일: ${conversion.filename} (${conversion.imageUrls.length}개 페이지) ---`,
+        );
+
         try {
           const analysisResult = await analyzeWithAI(conversion.imageUrls, tok);
           aiResults.push({
@@ -1218,7 +1298,10 @@ function App() {
             ...analysisResult,
           });
         } catch (analysisErr) {
-          console.error(`분석 중 예외 발생 (${conversion.filename}):`, analysisErr);
+          console.error(
+            `분석 중 예외 발생 (${conversion.filename}):`,
+            analysisErr,
+          );
           aiResults.push({
             filename: conversion.filename,
             pdfKey: conversion.pdfKey,
@@ -1230,15 +1313,14 @@ function App() {
 
       setAnalysisResults(aiResults);
       setAnalyzing(false);
-      
+
       console.log(`\n${"=".repeat(60)}`);
       console.log(`✅ 전체 프로세스 완료!`);
       console.log(`${"=".repeat(60)}\n`);
-      
     } catch (globalErr) {
       console.error("전체 프로세스 오류:", globalErr);
       alert(`오류가 발생했습니다: ${globalErr.message}`);
-      
+
       // 상태 초기화
       setUploading(false);
       setConverting(false);
@@ -1303,61 +1385,64 @@ function App() {
         </form>
 
         <ul className="space-y-2 list-decimal">
-          {Array.isArray(tok) && tok.map((item, idx) => {
-            if (!item) return null;
-            
-            // item이 문자열인 경우와 객체인 경우 모두 처리
-            const promptText = typeof item === 'string' 
-              ? item.trim() 
-              : (item && typeof item === 'object' && 'prompt' in item 
-                  ? String(item.prompt || "").trim() 
-                  : String(item || "").trim());
-            
-            const withImage = typeof item === 'string'
-              ? true // 기본값
-              : (item && typeof item === 'object' && 'withImage' in item
-                  ? Boolean(item.withImage)
-                  : true); // 기본값
-            
-            if (!promptText) return null;
-            
-            return (
-              <li
-                key={`prompt-${idx}`}
-                className="flex items-center justify-between gap-3 p-3 rounded-lg ring-2 ring-sky-800 bg-white"
-              >
-                <div className="flex-1">
-                  <div className="flex items-center gap-2">
-                    <span className="whitespace-pre-wrap break-words font-semibold">
-                      {idx + 1}. {promptText}
-                    </span>
-                    {withImage ? (
-                      <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800">
-                        🖼️ 이미지
-                      </span>
-                    ) : (
-                      <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-800">
-                        📝 텍스트
-                      </span>
-                    )}
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => handleRemove(idx)}
-                  disabled={isSavingPrompts}
-                  className={`px-2 py-1 rounded-md text-xs ${
-                    isSavingPrompts
-                      ? "bg-gray-400 text-gray-200 cursor-not-allowed"
-                      : "bg-red-600 text-white hover:bg-red-700"
-                  }`}
-                  aria-label={`ToK ${idx + 1} 삭제`}
+          {Array.isArray(tok) &&
+            tok.map((item, idx) => {
+              if (!item) return null;
+
+              // item이 문자열인 경우와 객체인 경우 모두 처리
+              const promptText =
+                typeof item === "string"
+                  ? item.trim()
+                  : item && typeof item === "object" && "prompt" in item
+                    ? String(item.prompt || "").trim()
+                    : String(item || "").trim();
+
+              const withImage =
+                typeof item === "string"
+                  ? true // 기본값
+                  : item && typeof item === "object" && "withImage" in item
+                    ? Boolean(item.withImage)
+                    : true; // 기본값
+
+              if (!promptText) return null;
+
+              return (
+                <li
+                  key={`prompt-${idx}`}
+                  className="flex items-center justify-between gap-3 p-3 rounded-lg ring-2 ring-sky-800 bg-white"
                 >
-                  삭제
-                </button>
-              </li>
-            );
-          })}
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2">
+                      <span className="whitespace-pre-wrap break-words font-semibold">
+                        {idx + 1}. {promptText}
+                      </span>
+                      {withImage ? (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800">
+                          🖼️ 이미지
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-800">
+                          📝 텍스트
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => handleRemove(idx)}
+                    disabled={isSavingPrompts}
+                    className={`px-2 py-1 rounded-md text-xs ${
+                      isSavingPrompts
+                        ? "bg-gray-400 text-gray-200 cursor-not-allowed"
+                        : "bg-red-600 text-white hover:bg-red-700"
+                    }`}
+                    aria-label={`ToK ${idx + 1} 삭제`}
+                  >
+                    삭제
+                  </button>
+                </li>
+              );
+            })}
         </ul>
 
         {/* 드래그 앤 드롭 영역 */}
@@ -1382,36 +1467,48 @@ function App() {
                   : "bg-sky-600 hover:bg-sky-700"
               }`}
             >
-              {uploading 
-                ? "업로드 중..." 
-                : converting 
-                ? "JPG 변환 중..." 
-                : analyzing
-                ? "AI 분석 중..."
-                : "AI 분석"}
+              {uploading
+                ? "업로드 중..."
+                : converting
+                  ? "JPG 변환 중..."
+                  : analyzing
+                    ? "AI 분석 중..."
+                    : "AI 분석"}
             </button>
-            
+
             {/* 진행 상황 표시 */}
             {analyzing && analysisProgress && analysisProgress.total > 0 && (
               <div className="bg-purple-50 border border-purple-200 rounded-lg p-3">
                 <p className="text-sm font-semibold text-purple-900 mb-1">
-                  📊 페이지 {analysisProgress.current || 0}/{analysisProgress.total || 0} 분석 중
+                  📊 페이지 {analysisProgress.current || 0}/
+                  {analysisProgress.total || 0} 분석 중
                 </p>
                 <p className="text-xs text-purple-700">
-                  Step {analysisProgress.step || 0}/{analysisProgress.totalSteps || 0} 실행 중...
+                  Step {analysisProgress.step || 0}/
+                  {analysisProgress.totalSteps || 0} 실행 중...
                 </p>
                 <div className="mt-2 bg-purple-200 rounded-full h-2 overflow-hidden">
-                  <div 
+                  <div
                     className="bg-purple-600 h-full transition-all duration-300"
-                    style={{ 
+                    style={{
                       width: `${
-                        analysisProgress.total > 0 && analysisProgress.totalSteps > 0
-                          ? Math.min(100, Math.max(0, 
-                              ((analysisProgress.current - 1) / analysisProgress.total * 100) + 
-                              (1 / analysisProgress.total * (analysisProgress.step / analysisProgress.totalSteps) * 100)
-                            ))
+                        analysisProgress.total > 0 &&
+                        analysisProgress.totalSteps > 0
+                          ? Math.min(
+                              100,
+                              Math.max(
+                                0,
+                                ((analysisProgress.current - 1) /
+                                  analysisProgress.total) *
+                                  100 +
+                                  (1 / analysisProgress.total) *
+                                    (analysisProgress.step /
+                                      analysisProgress.totalSteps) *
+                                    100,
+                              ),
+                            )
                           : 0
-                      }%` 
+                      }%`,
                     }}
                   />
                 </div>
@@ -1426,7 +1523,7 @@ function App() {
               <ul className="space-y-2">
                 {uploadResults.map((r, i) => {
                   if (!r) return null;
-                  
+
                   return (
                     <li
                       key={`upload-${r.filename ?? "file"}-${i}`}
@@ -1463,7 +1560,7 @@ function App() {
               <ul className="space-y-2">
                 {convertResults.map((r, i) => {
                   if (!r) return null;
-                  
+
                   return (
                     <li
                       key={`convert-${r.filename ?? "file"}-${i}`}
@@ -1474,34 +1571,45 @@ function App() {
                       }`}
                     >
                       <p className="text-sm font-medium">
-                        {r.filename ?? "파일"} — {r.ok ? "변환 성공" : "변환 실패"}
+                        {r.filename ?? "파일"} —{" "}
+                        {r.ok ? "변환 성공" : "변환 실패"}
                       </p>
                       {r.ok ? (
                         <div className="text-xs text-neutral-600">
                           <p>PDF Key: {r.pdfKey || "?"}</p>
-                          <p>전체 페이지: {r.totalPages ?? "?"} • 업로드 성공: {r.uploaded ?? "?"} • 실패: {r.failed ?? 0}</p>
-                          {r.results && Array.isArray(r.results) && r.results.length > 0 && (
-                            <details className="mt-2">
-                              <summary className="cursor-pointer text-blue-700 hover:underline">
-                                페이지별 결과 보기
-                              </summary>
-                              <ul className="mt-2 space-y-1 ml-4">
-                                {r.results.map((pageResult, idx) => {
-                                  if (!pageResult) return null;
-                                  
-                                  return (
-                                    <li key={`page-${idx}`} className={`text-xs ${
-                                      pageResult.status === 'success' 
-                                        ? 'text-green-700' 
-                                        : 'text-red-700'
-                                    }`}>
-                                      페이지 {pageResult.page ?? idx + 1}: {pageResult.message || "?"} (Status: {pageResult.statusCode || "?"})
-                                    </li>
-                                  );
-                                })}
-                              </ul>
-                            </details>
-                          )}
+                          <p>
+                            전체 페이지: {r.totalPages ?? "?"} • 업로드 성공:{" "}
+                            {r.uploaded ?? "?"} • 실패: {r.failed ?? 0}
+                          </p>
+                          {r.results &&
+                            Array.isArray(r.results) &&
+                            r.results.length > 0 && (
+                              <details className="mt-2">
+                                <summary className="cursor-pointer text-blue-700 hover:underline">
+                                  페이지별 결과 보기
+                                </summary>
+                                <ul className="mt-2 space-y-1 ml-4">
+                                  {r.results.map((pageResult, idx) => {
+                                    if (!pageResult) return null;
+
+                                    return (
+                                      <li
+                                        key={`page-${idx}`}
+                                        className={`text-xs ${
+                                          pageResult.status === "success"
+                                            ? "text-green-700"
+                                            : "text-red-700"
+                                        }`}
+                                      >
+                                        페이지 {pageResult.page ?? idx + 1}:{" "}
+                                        {pageResult.message || "?"} (Status:{" "}
+                                        {pageResult.statusCode || "?"})
+                                      </li>
+                                    );
+                                  })}
+                                </ul>
+                              </details>
+                            )}
                         </div>
                       ) : (
                         <p className="text-xs text-red-700 whitespace-pre-wrap">
@@ -1525,10 +1633,10 @@ function App() {
                   onClick={copyAllResults}
                   className="px-4 py-2 rounded-lg bg-green-600 text-white hover:bg-green-700 flex items-center gap-2 text-sm"
                 >
-                  <svg 
-                    xmlns="http://www.w3.org/2000/svg" 
-                    viewBox="0 0 24 24" 
-                    fill="currentColor" 
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    viewBox="0 0 24 24"
+                    fill="currentColor"
                     className="w-4 h-4"
                   >
                     <path d="M7.5 3.375c0-1.036.84-1.875 1.875-1.875h.375a3.75 3.75 0 013.75 3.75v1.875C13.5 8.161 14.34 9 15.375 9h1.875A3.75 3.75 0 0121 12.75v3.375C21 17.16 20.16 18 19.125 18h-9.75A1.875 1.875 0 017.5 16.125V3.375z" />
@@ -1540,7 +1648,7 @@ function App() {
               <ul className="space-y-4">
                 {analysisResults.map((result, i) => {
                   if (!result) return null;
-                  
+
                   return (
                     <li
                       key={`analysis-${result.filename ?? "file"}-${i}`}
@@ -1551,54 +1659,67 @@ function App() {
                       }`}
                     >
                       <p className="text-base font-bold mb-2">
-                        📄 {result.filename ?? "파일"} — {result.ok ? "분석 완료" : "분석 실패"}
+                        📄 {result.filename ?? "파일"} —{" "}
+                        {result.ok ? "분석 완료" : "분석 실패"}
                       </p>
-                      
+
                       {result.ok ? (
                         <div className="space-y-3">
-                          {result.results && Array.isArray(result.results) && result.results.map((pageResult, pageIdx) => {
-                            if (!pageResult) return null;
-                            
-                            return (
-                              <div key={`page-${pageIdx}`} className="bg-white p-3 rounded-lg shadow-sm">
-                                <p className="font-semibold text-sm mb-2">
-                                  📖 페이지 {pageResult.page ?? pageIdx + 1}
-                                </p>
-                                
-                                {pageResult.steps && Array.isArray(pageResult.steps) && pageResult.steps.map((step, stepIdx) => {
-                                  if (!step) return null;
-                                  
-                                  return (
-                                    <div key={`step-${stepIdx}`} className="mt-2 pl-3 border-l-2 border-purple-300">
-                                      <div className="flex items-center gap-2 mb-1">
-                                        <p className="text-xs font-semibold text-purple-700">
-                                          Step {step.step ?? stepIdx + 1}: {step.prompt || "(프롬프트 없음)"}
-                                        </p>
-                                        {step.withImage ? (
-                                          <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800">
-                                            🖼️
-                                          </span>
-                                        ) : (
-                                          <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-800">
-                                            📝
-                                          </span>
-                                        )}
-                                      </div>
-                                      {step.success ? (
-                                        <div className="mt-1 text-sm text-neutral-700 whitespace-pre-wrap bg-neutral-50 p-2 rounded">
-                                          {step.response || "(응답 없음)"}
+                          {result.results &&
+                            Array.isArray(result.results) &&
+                            result.results.map((pageResult, pageIdx) => {
+                              if (!pageResult) return null;
+
+                              return (
+                                <div
+                                  key={`page-${pageIdx}`}
+                                  className="bg-white p-3 rounded-lg shadow-sm"
+                                >
+                                  <p className="font-semibold text-sm mb-2">
+                                    📖 페이지 {pageResult.page ?? pageIdx + 1}
+                                  </p>
+
+                                  {pageResult.steps &&
+                                    Array.isArray(pageResult.steps) &&
+                                    pageResult.steps.map((step, stepIdx) => {
+                                      if (!step) return null;
+
+                                      return (
+                                        <div
+                                          key={`step-${stepIdx}`}
+                                          className="mt-2 pl-3 border-l-2 border-purple-300"
+                                        >
+                                          <div className="flex items-center gap-2 mb-1">
+                                            <p className="text-xs font-semibold text-purple-700">
+                                              Step {step.step ?? stepIdx + 1}:{" "}
+                                              {step.prompt || "(프롬프트 없음)"}
+                                            </p>
+                                            {step.withImage ? (
+                                              <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800">
+                                                🖼️
+                                              </span>
+                                            ) : (
+                                              <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-800">
+                                                📝
+                                              </span>
+                                            )}
+                                          </div>
+                                          {step.success ? (
+                                            <div className="mt-1 text-sm text-neutral-700 whitespace-pre-wrap bg-neutral-50 p-2 rounded">
+                                              {step.response || "(응답 없음)"}
+                                            </div>
+                                          ) : (
+                                            <p className="mt-1 text-xs text-red-700">
+                                              ❌{" "}
+                                              {step.error || "알 수 없는 오류"}
+                                            </p>
+                                          )}
                                         </div>
-                                      ) : (
-                                        <p className="mt-1 text-xs text-red-700">
-                                          ❌ {step.error || "알 수 없는 오류"}
-                                        </p>
-                                      )}
-                                    </div>
-                                  );
-                                })}
-                              </div>
-                            );
-                          })}
+                                      );
+                                    })}
+                                </div>
+                              );
+                            })}
                         </div>
                       ) : (
                         <p className="text-sm text-red-700 whitespace-pre-wrap">

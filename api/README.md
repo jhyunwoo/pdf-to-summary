@@ -20,15 +20,18 @@ npm run deploy
 ### 1. PDF 업로드
 
 #### POST `/upload`
+
 multipart/form-data 방식으로 PDF 파일 업로드
 
 **요청:**
+
 ```bash
 curl -X POST https://your-worker.workers.dev/upload \
   -F "file=@document.pdf"
 ```
 
 **응답:**
+
 ```json
 {
   "ok": true,
@@ -39,9 +42,11 @@ curl -X POST https://your-worker.workers.dev/upload \
 ```
 
 #### PUT `/upload/:filename`
+
 RAW 바디 스트리밍 방식으로 PDF 파일 업로드 (권장)
 
 **요청:**
+
 ```bash
 curl -X PUT https://your-worker.workers.dev/upload/document.pdf \
   -H "Content-Type: application/pdf" \
@@ -51,14 +56,17 @@ curl -X PUT https://your-worker.workers.dev/upload/document.pdf \
 ### 2. PDF 정보 조회
 
 #### GET `/pdf-info/:key`
+
 PDF 파일의 기본 정보 조회 (페이지 수, 크기 등)
 
 **요청:**
+
 ```bash
 curl https://your-worker.workers.dev/pdf-info/uploads/2025/10/31/uuid-document.pdf
 ```
 
 **응답:**
+
 ```json
 {
   "ok": true,
@@ -75,13 +83,16 @@ curl https://your-worker.workers.dev/pdf-info/uploads/2025/10/31/uuid-document.p
 ### 3. PDF를 이미지로 변환 (외부 API 사용 - 권장)
 
 #### POST `/pdf-to-images-external`
+
 **Browser Rendering 없이** 외부 API를 사용하여 PDF를 이미지로 변환
 
 **지원 서비스:**
+
 - **CloudConvert** (무료: 25 크레딧/일)
 - **ConvertAPI** (무료: 250 크레딧)
 
 **요청 예시:**
+
 ```bash
 # CloudConvert 사용
 curl -X POST https://your-worker.workers.dev/pdf-to-images-external \
@@ -105,12 +116,14 @@ curl -X POST https://your-worker.workers.dev/pdf-to-images-external \
 ```
 
 **파라미터:**
+
 - `key` (필수): R2에 저장된 PDF 파일의 키
 - `service` (선택): "cloudconvert" 또는 "convertapi" (기본값: "cloudconvert")
 - `format` (선택): 이미지 형식 "png" 또는 "jpeg" (기본값: "png")
 - `dpi` (선택): 이미지 해상도 (기본값: 150)
 
 **응답:**
+
 ```json
 {
   "ok": true,
@@ -131,6 +144,7 @@ curl -X POST https://your-worker.workers.dev/pdf-to-images-external \
 #### 외부 API 설정 방법:
 
 **CloudConvert:**
+
 ```bash
 # 1. https://cloudconvert.com/ 에서 무료 계정 생성
 # 2. API 키 발급
@@ -139,6 +153,7 @@ wrangler secret put CLOUDCONVERT_API_KEY
 ```
 
 **ConvertAPI:**
+
 ```bash
 # 1. https://www.convertapi.com/ 에서 무료 계정 생성
 # 2. Secret 키 확인
@@ -149,9 +164,11 @@ wrangler secret put CONVERTAPI_SECRET
 ### 4. PDF를 이미지로 변환 (Browser Rendering)
 
 #### POST `/pdf-to-images`
+
 Cloudflare Browser Rendering API를 사용하여 PDF를 이미지로 변환 (유료)
 
 **요청:**
+
 ```bash
 curl -X POST https://your-worker.workers.dev/pdf-to-images \
   -H "Content-Type: application/json" \
@@ -163,11 +180,13 @@ curl -X POST https://your-worker.workers.dev/pdf-to-images \
 ```
 
 **파라미터:**
+
 - `key` (필수): R2에 저장된 PDF 파일의 키
 - `scale` (선택): 이미지 스케일 (기본값: 2.0, 고해상도)
 - `format` (선택): 이미지 형식 "png" 또는 "jpeg" (기본값: "png")
 
 **응답:**
+
 ```json
 {
   "ok": true,
@@ -187,9 +206,11 @@ curl -X POST https://your-worker.workers.dev/pdf-to-images \
 ### 5. Prompt 관리
 
 #### POST `/prompts`
+
 Prompt 리스트 추가 (기존에 추가)
 
 **요청:**
+
 ```bash
 curl -X POST https://your-worker.workers.dev/prompts \
   -H "Content-Type: application/json" \
@@ -197,9 +218,11 @@ curl -X POST https://your-worker.workers.dev/prompts \
 ```
 
 #### PUT `/prompts`
+
 Prompt 리스트 전체 교체
 
 **요청:**
+
 ```bash
 curl -X PUT https://your-worker.workers.dev/prompts \
   -H "Content-Type: application/json" \
@@ -208,11 +231,11 @@ curl -X PUT https://your-worker.workers.dev/prompts \
 
 ## PDF to Image 변환 방법 비교
 
-| 방법 | 비용 | 설정 난이도 | 속도 | 추천 |
-|------|------|------------|------|------|
-| **외부 API (CloudConvert)** | 무료 25 크레딧/일 | ⭐ 쉬움 | 빠름 | ✅ 권장 |
-| **외부 API (ConvertAPI)** | 무료 250 크레딧 | ⭐ 쉬움 | 빠름 | ✅ 권장 |
-| **Browser Rendering** | 유료 (Workers 유료 플랜) | ⭐⭐⭐ 어려움 | 느림 | 선택적 |
+| 방법                        | 비용                     | 설정 난이도   | 속도 | 추천    |
+| --------------------------- | ------------------------ | ------------- | ---- | ------- |
+| **외부 API (CloudConvert)** | 무료 25 크레딧/일        | ⭐ 쉬움       | 빠름 | ✅ 권장 |
+| **외부 API (ConvertAPI)**   | 무료 250 크레딧          | ⭐ 쉬움       | 빠름 | ✅ 권장 |
+| **Browser Rendering**       | 유료 (Workers 유료 플랜) | ⭐⭐⭐ 어려움 | 느림 | 선택적  |
 
 ### 권장 사용법:
 
@@ -223,6 +246,7 @@ curl -X PUT https://your-worker.workers.dev/prompts \
 ## 외부 API 설정 (권장)
 
 ### CloudConvert 설정
+
 ```bash
 # 1. 계정 생성 및 API 키 발급
 # https://cloudconvert.com/
@@ -239,11 +263,13 @@ curl -X POST https://your-worker.workers.dev/pdf-to-images-external \
 ```
 
 **무료 플랜:**
+
 - 25 크레딧/일
 - 1 PDF → 이미지 변환 = 약 1 크레딧
 - 충분한 테스트 및 소규모 서비스에 적합
 
 ### ConvertAPI 설정
+
 ```bash
 # 1. 계정 생성 및 Secret 키 확인
 # https://www.convertapi.com/
@@ -260,6 +286,7 @@ curl -X POST https://your-worker.workers.dev/pdf-to-images-external \
 ```
 
 **무료 플랜:**
+
 - 250 크레딧 (1회성)
 - 1 PDF 페이지 = 1 크레딧
 - 테스트에 충분
@@ -275,6 +302,7 @@ PDF를 이미지로 변환하는 기능을 Browser Rendering으로 사용하려�
    - Browser Rendering 기능 활성화 (유료 플랜 필요)
 
 2. **이미 설정됨**: `wrangler.jsonc`에 browser binding 추가 완료
+
    ```jsonc
    "browser": {
      "binding": "BROWSER"
@@ -286,6 +314,7 @@ PDF를 이미지로 변환하는 기능을 Browser Rendering으로 사용하려�
    - `@cloudflare/puppeteer`: Cloudflare Workers용 Puppeteer
 
 ### 참고 문서:
+
 - [Cloudflare Browser Rendering](https://developers.cloudflare.com/browser-rendering/)
 - [Cloudflare Puppeteer](https://github.com/cloudflare/puppeteer)
 
@@ -301,7 +330,7 @@ npm run cf-typegen
 
 ```ts
 // src/index.ts
-const app = new Hono<{ Bindings: CloudflareBindings }>()
+const app = new Hono<{ Bindings: CloudflareBindings }>();
 ```
 
 ## 의존성

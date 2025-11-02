@@ -6,11 +6,10 @@ type Bindings = {
   pdf_to_summary: R2Bucket;
   DB: D1Database;
   pdf_to_summary_kv: KVNamespace;
-  PUBLIC_URL?: string; // R2 public URL (선택사항, 예: https://your-domain.com)
+  PUBLIC_URL: string;
 };
 
-const KV_PREFIX = "prompt:"; // 하위 호환성을 위해 유지 (마이그레이션용)
-const PROMPTS_LIST_KEY = "prompts:list"; // 단일 KV 키
+const PROMPTS_LIST_KEY = "prompts"; // 단일 KV 키
 
 const app = new Hono<{ Bindings: Bindings }>();
 
@@ -49,12 +48,12 @@ function buildImageKey(filename?: string) {
   const mm = String(d.getUTCMonth() + 1).padStart(2, "0");
   const dd = String(d.getUTCDate()).padStart(2, "0");
   const uuid = crypto.randomUUID();
-  
+
   // 확장자 추출 (없으면 .jpg 사용)
   const extMatch = safe.match(/\.(jpg|jpeg|png|gif|webp)$/i);
   const ext = extMatch ? extMatch[0] : ".jpg";
   const nameWithoutExt = extMatch ? safe.replace(extMatch[0], "") : safe;
-  
+
   return `images/${yyyy}/${mm}/${dd}/${uuid}-${nameWithoutExt}${ext}`;
 }
 
@@ -62,9 +61,15 @@ function buildImageKey(filename?: string) {
  * 유틸: 이미지 content-type 검증
  */
 function isValidImageType(contentType: string, filename: string): boolean {
-  const imageTypes = ["image/jpeg", "image/jpg", "image/png", "image/gif", "image/webp"];
+  const imageTypes = [
+    "image/jpeg",
+    "image/jpg",
+    "image/png",
+    "image/gif",
+    "image/webp",
+  ];
   const imageExts = [".jpg", ".jpeg", ".png", ".gif", ".webp"];
-  
+
   return (
     imageTypes.some((type) => contentType.toLowerCase().includes(type)) ||
     imageExts.some((ext) => filename.toLowerCase().endsWith(ext))
@@ -78,7 +83,7 @@ function getImageContentType(contentType: string, filename: string): string {
   if (contentType.includes("image/")) {
     return contentType;
   }
-  
+
   // 파일명에서 추론
   const lower = filename.toLowerCase();
   if (lower.endsWith(".png")) return "image/png";
@@ -243,10 +248,13 @@ app.post("/upload-image", async (c) => {
 app.put("/upload-image/:filename", async (c) => {
   const filename = c.req.param("filename") || "upload.jpg";
   const ct = c.req.header("content-type") || "";
-  
+
   if (!isValidImageType(ct, filename)) {
     return c.json(
-      { error: "Content-Type이 이미지 타입이어야 합니다. (image/jpeg, image/png, etc.)" },
+      {
+        error:
+          "Content-Type이 이미지 타입이어야 합니다. (image/jpeg, image/png, etc.)",
+      },
       415,
     );
   }
@@ -290,7 +298,7 @@ app.put("/upload-image/:filename", async (c) => {
  */
 app.get("/image/*", async (c) => {
   const key = c.req.path.replace(/^\/image\//, "");
-  
+
   if (!key) {
     return c.json({ error: "이미지 키가 필요합니다." }, 400);
   }
@@ -303,11 +311,17 @@ app.get("/image/*", async (c) => {
 
   // 이미지 반환
   const headers = new Headers();
-  headers.set("Content-Type", imageObject.httpMetadata?.contentType || "image/jpeg");
+  headers.set(
+    "Content-Type",
+    imageObject.httpMetadata?.contentType || "image/jpeg",
+  );
   headers.set("Cache-Control", "public, max-age=31536000"); // 1년 캐시
-  
+
   if (imageObject.httpMetadata?.contentDisposition) {
-    headers.set("Content-Disposition", imageObject.httpMetadata.contentDisposition);
+    headers.set(
+      "Content-Disposition",
+      imageObject.httpMetadata.contentDisposition,
+    );
   }
 
   return new Response(imageObject.body, {
@@ -322,7 +336,7 @@ app.get("/image/*", async (c) => {
  */
 app.get("/pdf/*", async (c) => {
   const key = c.req.path.replace(/^\/pdf\//, "");
-  
+
   if (!key) {
     return c.json({ error: "PDF 키가 필요합니다." }, 400);
   }
@@ -335,11 +349,17 @@ app.get("/pdf/*", async (c) => {
 
   // PDF 반환
   const headers = new Headers();
-  headers.set("Content-Type", pdfObject.httpMetadata?.contentType || "application/pdf");
+  headers.set(
+    "Content-Type",
+    pdfObject.httpMetadata?.contentType || "application/pdf",
+  );
   headers.set("Cache-Control", "public, max-age=31536000"); // 1년 캐시
-  
+
   if (pdfObject.httpMetadata?.contentDisposition) {
-    headers.set("Content-Disposition", pdfObject.httpMetadata.contentDisposition);
+    headers.set(
+      "Content-Disposition",
+      pdfObject.httpMetadata.contentDisposition,
+    );
   }
 
   return new Response(pdfObject.body, {
@@ -357,7 +377,7 @@ app.get("/prompts", async (c) => {
   try {
     // 단일 KV 키에서 프롬프트 리스트 가져오기
     const value = await c.env.pdf_to_summary_kv.get(PROMPTS_LIST_KEY);
-    
+
     if (value === null) {
       // 저장된 프롬프트가 없으면 빈 배열 반환
       return c.json({ ok: true, prompts: [] });
@@ -366,23 +386,17 @@ app.get("/prompts", async (c) => {
     try {
       // JSON 배열로 파싱
       const parsed = JSON.parse(value) as unknown;
-      
+
       if (!Array.isArray(parsed)) {
         // 배열이 아니면 빈 배열 반환
         return c.json({ ok: true, prompts: [] });
       }
 
-      // 형식 변환 및 검증
+      // 형식 변환 및 검증: { prompt: string, withImage: boolean }[]
       const filteredPrompts: Array<{ prompt: string; withImage: boolean }> = [];
-      
+
       for (const p of parsed) {
-        if (typeof p === 'string') {
-          // 문자열 형식 (하위 호환성)
-          const trimmed = p.trim();
-          if (trimmed) {
-            filteredPrompts.push({ prompt: trimmed, withImage: true });
-          }
-        } else if (p && typeof p === 'object' && p !== null && 'prompt' in p) {
+        if (p && typeof p === "object" && p !== null && "prompt" in p) {
           // 객체 형식: { prompt: string, withImage: boolean }
           const promptObj = p as { prompt?: unknown; withImage?: unknown };
           const promptText = promptObj.prompt
@@ -417,8 +431,8 @@ app.get("/prompts", async (c) => {
 
 /** POST /prompts
  *  - 단일 KV 키에 프롬프트 리스트를 JSON 배열로 저장
- *  - body: { prompts: { prompt: string, withImage: boolean }[] } 또는 { prompts: string[] } (하위 호환)
- *  - 응답: { ok: true, deleted: number, saved: number }
+ *  - body: { prompts: { prompt: string, withImage: boolean }[] }
+ *  - 응답: { ok: true, saved: number }
  */
 app.post("/prompts", async (c) => {
   const body = (await c.req.json().catch(() => null)) as {
@@ -428,63 +442,39 @@ app.post("/prompts", async (c) => {
     return c.json({ error: '"prompts" must be an array' }, 400);
   }
 
-  // 1) 기존 개별 KV 키들 삭제 (하위 호환성 및 마이그레이션)
-  let deleted = 0;
-  let cursor: string | undefined = undefined;
-  do {
-    const batch: KVNamespaceListResult<unknown, string> =
-      await c.env.pdf_to_summary_kv.list({
-        prefix: KV_PREFIX,
-        cursor,
-      });
-    if (batch.keys.length) {
-      await Promise.all(
-        batch.keys.map((k) => c.env.pdf_to_summary_kv.delete(k.name)),
-      );
-      deleted += batch.keys.length;
-    }
-    cursor = batch.list_complete ? undefined : batch.cursor;
-  } while (cursor);
-
-  // 2) 형식 변환 및 검증: { prompt: string, withImage: boolean }[] 또는 string[]
+  // 형식 변환 및 검증: { prompt: string, withImage: boolean }[]
   const promptsToSave = body.prompts
     .map((p) => {
-      if (typeof p === 'string') {
-        // 문자열만 있는 경우 (하위 호환성)
-        const trimmed = p.trim();
-        return trimmed ? { prompt: trimmed, withImage: true } : null;
-      } else if (p && typeof p === 'object') {
+      if (p && typeof p === "object") {
         // 객체 형식
         const promptObj = p as { prompt?: unknown; withImage?: unknown };
         const promptText = promptObj.prompt
           ? String(promptObj.prompt).trim()
-          : String(p).trim();
-        
+          : "";
+
         if (!promptText) {
           return null;
         }
-        
+
         return {
           prompt: promptText,
           withImage: Boolean(promptObj.withImage ?? true),
         };
-      } else {
-        const trimmed = String(p ?? "").trim();
-        return trimmed ? { prompt: trimmed, withImage: true } : null;
       }
+      return null;
     })
     .filter((p) => p !== null && p.prompt && p.prompt.length > 0) as Array<{
-      prompt: string;
-      withImage: boolean;
-    }>;
+    prompt: string;
+    withImage: boolean;
+  }>;
 
-  // 3) 단일 KV 키에 JSON 배열로 저장
+  // 단일 KV 키에 JSON 배열로 저장
   await c.env.pdf_to_summary_kv.put(
     PROMPTS_LIST_KEY,
     JSON.stringify(promptsToSave),
   );
 
-  return c.json({ ok: true, deleted, saved: promptsToSave.length });
+  return c.json({ ok: true, saved: promptsToSave.length });
 });
 
 /**
