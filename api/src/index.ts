@@ -1,18 +1,22 @@
 import { Hono } from "hono";
 import { cors } from "hono/cors";
-import { PDFDocument } from "pdf-lib";
+import buildKey from "./libs/buildKey";
+import buildImageKey from "./libs/buildImageKey";
+import isValidImageType from "./libs/isValidImageType";
+import getImageContentType from "./libs/getImageContentType";
 
 type Bindings = {
-  pdf_to_summary: R2Bucket;
-  DB: D1Database;
-  pdf_to_summary_kv: KVNamespace;
-  PUBLIC_URL: string;
+  pdf_to_summary: R2Bucket; // PDF 저장용 클라우드 스토리지
+  pdf_to_summary_kv: KVNamespace; // 프롬프트 저장용 Key-Value 저장소
+  PUBLIC_URL: string; // PDF 저장소 공개 URL
 };
 
-const PROMPTS_LIST_KEY = "prompts"; // 단일 KV 키
+const PROMPTS_LIST_KEY = "prompts"; // PDF 저장에 사용할 KEY
 
+// 서버 객체 생성
 const app = new Hono<{ Bindings: Bindings }>();
 
+// 모든 요청 origin 허용 (CORS 정책)
 app.use(
   "*",
   cors({
@@ -22,132 +26,23 @@ app.use(
   }),
 );
 
-app.get("/", (c) => c.text("Hello Hono!"));
 
 /**
- * 유틸: R2 오브젝트 키 생성 (폴더/날짜/UUID.pdf)
- */
-function buildKey(filename?: string) {
-  const safe = (filename || "upload.pdf").replace(/[^\w.\-]+/g, "_");
-  const d = new Date();
-  const yyyy = d.getUTCFullYear();
-  const mm = String(d.getUTCMonth() + 1).padStart(2, "0");
-  const dd = String(d.getUTCDate()).padStart(2, "0");
-  const uuid = crypto.randomUUID();
-  const ext = safe.toLowerCase().endsWith(".pdf") ? "" : ".pdf";
-  return `uploads/${yyyy}/${mm}/${dd}/${uuid}-${safe}${ext}`;
-}
-
-/**
- * 유틸: 이미지 키 생성 (폴더/날짜/UUID.확장자)
- */
-function buildImageKey(filename?: string) {
-  const safe = (filename || "upload.jpg").replace(/[^\w.\-]+/g, "_");
-  const d = new Date();
-  const yyyy = d.getUTCFullYear();
-  const mm = String(d.getUTCMonth() + 1).padStart(2, "0");
-  const dd = String(d.getUTCDate()).padStart(2, "0");
-  const uuid = crypto.randomUUID();
-
-  // 확장자 추출 (없으면 .jpg 사용)
-  const extMatch = safe.match(/\.(jpg|jpeg|png|gif|webp)$/i);
-  const ext = extMatch ? extMatch[0] : ".jpg";
-  const nameWithoutExt = extMatch ? safe.replace(extMatch[0], "") : safe;
-
-  return `images/${yyyy}/${mm}/${dd}/${uuid}-${nameWithoutExt}${ext}`;
-}
-
-/**
- * 유틸: 이미지 content-type 검증
- */
-function isValidImageType(contentType: string, filename: string): boolean {
-  const imageTypes = [
-    "image/jpeg",
-    "image/jpg",
-    "image/png",
-    "image/gif",
-    "image/webp",
-  ];
-  const imageExts = [".jpg", ".jpeg", ".png", ".gif", ".webp"];
-
-  return (
-    imageTypes.some((type) => contentType.toLowerCase().includes(type)) ||
-    imageExts.some((ext) => filename.toLowerCase().endsWith(ext))
-  );
-}
-
-/**
- * 유틸: Content-Type에서 이미지 MIME 타입 추출
- */
-function getImageContentType(contentType: string, filename: string): string {
-  if (contentType.includes("image/")) {
-    return contentType;
-  }
-
-  // 파일명에서 추론
-  const lower = filename.toLowerCase();
-  if (lower.endsWith(".png")) return "image/png";
-  if (lower.endsWith(".gif")) return "image/gif";
-  if (lower.endsWith(".webp")) return "image/webp";
-  return "image/jpeg"; // 기본값
-}
-
-/**
- * 1) multipart/form-data 업로드 (필드명: `file`)
- * 작은/중간 크기 파일에 적합. (Workers가 폼을 파싱해야 하므로 아주 큰 파일엔 비권장)
- */
-app.post("/upload", async (c) => {
-  const form = await c.req.formData();
-  const file = form.get("file");
-
-  if (!(file instanceof File)) {
-    return c.json(
-      { error: 'form-data field "file" (PDF) 가 필요합니다.' },
-      400,
-    );
-  }
-
-  // 콘텐츠 타입 점검(완벽 보장은 아님)
-  const contentType = file.type || "application/pdf";
-  if (!/pdf/i.test(contentType) && !file.name.toLowerCase().endsWith(".pdf")) {
-    return c.json({ error: "PDF 파일만 업로드할 수 있습니다." }, 415);
-  }
-
-  const key = buildKey(file.name);
-
-  // R2에 스트리밍 업로드
-  await c.env.pdf_to_summary.put(key, file.stream(), {
-    httpMetadata: { contentType: "application/pdf" },
-    customMetadata: {
-      originalName: file.name || "unknown.pdf",
-      uploadedByIp: c.req.header("cf-connecting-ip") || "",
-    },
-  });
-
-  // 업로드 정보 조회
-  const head = await c.env.pdf_to_summary.head(key);
-
-  return c.json(
-    {
-      ok: true,
-      key,
-      size: head?.size ?? null,
-      etag: head?.etag ?? null,
-    },
-    201,
-  );
-});
-
-/**
- * 2) RAW 바디 스트리밍 업로드 (권장)
+ * PDF 업로드 (RAW 바디 스트리밍 업로드)
  * - 요청: PUT /upload/:filename
  * - 헤더: Content-Type: application/pdf
  * - 바디: 파일 바이트 스트림
- * 폼 파싱 없이 바로 R2로 스트리밍 → 큰 파일에 유리
  */
 app.put("/upload/:filename", async (c) => {
-  const filename = c.req.param("filename") || "upload.pdf";
+  const filename = c.req.param("filename");
+
+  if(!filename){
+    return c.json({ error: "파일명이 제공되지 않았습니다." }, 400);
+  }
+
   const ct = c.req.header("content-type") || "";
+
+  // 업로드 하는 파일 타입이 pdf인지 확인
   if (!/application\/pdf/i.test(ct)) {
     return c.json(
       { error: "Content-Type: application/pdf 이어야 합니다." },
@@ -156,10 +51,17 @@ app.put("/upload/:filename", async (c) => {
   }
 
   const body = c.req.raw.body;
-  if (!body) return c.json({ error: "요청 바디가 비었습니다." }, 400);
 
+  // 파일이 존재하지 않을 경우
+  if (!body) {
+    return c.json({ error: "요청 바디가 비었습니다." }, 400);
+  }
+
+
+  // 파일 키 생성
   const key = buildKey(filename);
 
+  // 파일 업로드
   await c.env.pdf_to_summary.put(key, body, {
     httpMetadata: { contentType: "application/pdf" },
     customMetadata: {
@@ -168,8 +70,10 @@ app.put("/upload/:filename", async (c) => {
     },
   });
 
+  // 업로드한 파일 정보 수집
   const head = await c.env.pdf_to_summary.head(key);
 
+  // 파일 업로드한 데이터 반환
   return c.json(
     {
       ok: true,
@@ -182,73 +86,24 @@ app.put("/upload/:filename", async (c) => {
 });
 
 /**
- * 3) 이미지 업로드 (multipart/form-data)
- * - 요청: POST /upload-image
- * - 필드명: file
- * - 응답: { ok: true, key: string, url: string, size: number }
- */
-app.post("/upload-image", async (c) => {
-  const form = await c.req.formData();
-  const file = form.get("file");
-
-  if (!(file instanceof File)) {
-    return c.json(
-      { error: 'form-data field "file" (이미지) 가 필요합니다.' },
-      400,
-    );
-  }
-
-  // 콘텐츠 타입 점검
-  const contentType = file.type || "image/jpeg";
-  if (!isValidImageType(contentType, file.name)) {
-    return c.json(
-      { error: "이미지 파일만 업로드할 수 있습니다. (jpg, png, gif, webp)" },
-      415,
-    );
-  }
-
-  const key = buildImageKey(file.name);
-  const imageContentType = getImageContentType(contentType, file.name);
-
-  // R2에 스트리밍 업로드
-  await c.env.pdf_to_summary.put(key, file.stream(), {
-    httpMetadata: { contentType: imageContentType },
-    customMetadata: {
-      originalName: file.name || "unknown",
-      uploadedByIp: c.req.header("cf-connecting-ip") || "",
-    },
-  });
-
-  // 업로드 정보 조회
-  const head = await c.env.pdf_to_summary.head(key);
-
-  // URL 생성
-  const baseUrl = c.env.PUBLIC_URL || new URL(c.req.url).origin;
-  const url = `${baseUrl}/image/${key}`;
-
-  return c.json(
-    {
-      ok: true,
-      key,
-      url,
-      size: head?.size ?? null,
-      etag: head?.etag ?? null,
-      contentType: imageContentType,
-    },
-    201,
-  );
-});
-
-/**
- * 4) 이미지 RAW 바디 스트리밍 업로드 (권장)
+ * 이미지 업로드 (RAW 바디 스트리밍 업로드)
  * - 요청: PUT /upload-image/:filename
  * - 헤더: Content-Type: image/*
  * - 바디: 파일 바이트 스트림
  */
 app.put("/upload-image/:filename", async (c) => {
-  const filename = c.req.param("filename") || "upload.jpg";
+  // param에서 파일명 가져오기
+  const filename = c.req.param("filename");
+
+  // 파일명이 존재하지 않을 경우 오류 처리
+  if(!filename){
+    return c.json({ error: "파일명이 제공되지 않았습니다." }, 400);
+  } 
+
+  // 파일 타입 확인
   const ct = c.req.header("content-type") || "";
 
+  // 이미지 타입이 맞는지 확인
   if (!isValidImageType(ct, filename)) {
     return c.json(
       {
@@ -259,12 +114,19 @@ app.put("/upload-image/:filename", async (c) => {
     );
   }
 
+  // 파일 데이터
   const body = c.req.raw.body;
-  if (!body) return c.json({ error: "요청 바디가 비었습니다." }, 400);
+  // 파일 데이터가 존재하지 않을 경우 오류 처리
+  if (!body) {
+    return c.json({ error: "요청 바디가 비었습니다." }, 400);
+  }
 
+  // 이미지 파일 키 생성
   const key = buildImageKey(filename);
+  // 이미지 파일 타입 확인
   const imageContentType = getImageContentType(ct, filename);
 
+  // 이미지 파일 업로드
   await c.env.pdf_to_summary.put(key, body, {
     httpMetadata: { contentType: imageContentType },
     customMetadata: {
@@ -273,12 +135,14 @@ app.put("/upload-image/:filename", async (c) => {
     },
   });
 
+  // 이미지 파일 업로드 확인
   const head = await c.env.pdf_to_summary.head(key);
 
-  // URL 생성
+  // 이미지 접근 URL
   const baseUrl = c.env.PUBLIC_URL || new URL(c.req.url).origin;
   const url = `${baseUrl}/${key}`;
 
+  // 이미지 업로드 확인 정보 반환
   return c.json(
     {
       ok: true,
@@ -290,82 +154,6 @@ app.put("/upload-image/:filename", async (c) => {
     },
     201,
   );
-});
-
-/**
- * GET /image/:key
- * R2에서 이미지를 가져와서 반환
- */
-app.get("/image/*", async (c) => {
-  const key = c.req.path.replace(/^\/image\//, "");
-
-  if (!key) {
-    return c.json({ error: "이미지 키가 필요합니다." }, 400);
-  }
-
-  // R2에서 이미지 가져오기
-  const imageObject = await c.env.pdf_to_summary.get(key);
-  if (!imageObject) {
-    return c.json({ error: "이미지를 찾을 수 없습니다." }, 404);
-  }
-
-  // 이미지 반환
-  const headers = new Headers();
-  headers.set(
-    "Content-Type",
-    imageObject.httpMetadata?.contentType || "image/jpeg",
-  );
-  headers.set("Cache-Control", "public, max-age=31536000"); // 1년 캐시
-
-  if (imageObject.httpMetadata?.contentDisposition) {
-    headers.set(
-      "Content-Disposition",
-      imageObject.httpMetadata.contentDisposition,
-    );
-  }
-
-  return new Response(imageObject.body, {
-    headers,
-    status: 200,
-  });
-});
-
-/**
- * GET /pdf/:key
- * R2에서 PDF를 가져와서 반환
- */
-app.get("/pdf/*", async (c) => {
-  const key = c.req.path.replace(/^\/pdf\//, "");
-
-  if (!key) {
-    return c.json({ error: "PDF 키가 필요합니다." }, 400);
-  }
-
-  // R2에서 PDF 가져오기
-  const pdfObject = await c.env.pdf_to_summary.get(key);
-  if (!pdfObject) {
-    return c.json({ error: "PDF를 찾을 수 없습니다." }, 404);
-  }
-
-  // PDF 반환
-  const headers = new Headers();
-  headers.set(
-    "Content-Type",
-    pdfObject.httpMetadata?.contentType || "application/pdf",
-  );
-  headers.set("Cache-Control", "public, max-age=31536000"); // 1년 캐시
-
-  if (pdfObject.httpMetadata?.contentDisposition) {
-    headers.set(
-      "Content-Disposition",
-      pdfObject.httpMetadata.contentDisposition,
-    );
-  }
-
-  return new Response(pdfObject.body, {
-    headers,
-    status: 200,
-  });
 });
 
 /**
@@ -435,84 +223,23 @@ app.get("/prompts", async (c) => {
  *  - 응답: { ok: true, saved: number }
  */
 app.post("/prompts", async (c) => {
+  // 프롬프트를 json에서 가져옴
   const body = (await c.req.json().catch(() => null)) as {
     prompts?: unknown;
   } | null;
+
+  // 프롬프트 형식이 맞는지 확인
   if (!body || !Array.isArray(body.prompts)) {
     return c.json({ error: '"prompts" must be an array' }, 400);
   }
 
-  // 형식 변환 및 검증: { prompt: string, withImage: boolean }[]
-  const promptsToSave = body.prompts
-    .map((p) => {
-      if (p && typeof p === "object") {
-        // 객체 형식
-        const promptObj = p as { prompt?: unknown; withImage?: unknown };
-        const promptText = promptObj.prompt
-          ? String(promptObj.prompt).trim()
-          : "";
-
-        if (!promptText) {
-          return null;
-        }
-
-        return {
-          prompt: promptText,
-          withImage: Boolean(promptObj.withImage ?? true),
-        };
-      }
-      return null;
-    })
-    .filter((p) => p !== null && p.prompt && p.prompt.length > 0) as Array<{
-    prompt: string;
-    withImage: boolean;
-  }>;
-
   // 단일 KV 키에 JSON 배열로 저장
   await c.env.pdf_to_summary_kv.put(
     PROMPTS_LIST_KEY,
-    JSON.stringify(promptsToSave),
+    JSON.stringify(body.prompts),
   );
 
-  return c.json({ ok: true, saved: promptsToSave.length });
-});
-
-/**
- * GET /pdf-info/:key
- * PDF 파일 정보 조회 (페이지 수 등)
- * Browser Rendering 없이 사용 가능
- */
-app.get("/pdf-info/:key", async (c) => {
-  const pdfKey = c.req.param("key");
-
-  // R2에서 PDF 가져오기
-  const pdfObject = await c.env.pdf_to_summary.get(pdfKey);
-  if (!pdfObject) {
-    return c.json({ error: "PDF 파일을 찾을 수 없습니다." }, 404);
-  }
-
-  try {
-    const pdfBuffer = await pdfObject.arrayBuffer();
-    const pdfDoc = await PDFDocument.load(pdfBuffer);
-    const pageCount = pdfDoc.getPageCount();
-
-    return c.json({
-      ok: true,
-      key: pdfKey,
-      pageCount,
-      size: pdfObject.size,
-      uploaded: pdfObject.uploaded?.toISOString(),
-      metadata: pdfObject.customMetadata,
-    });
-  } catch (error) {
-    return c.json(
-      {
-        error: "PDF 정보를 가져오는 중 오류가 발생했습니다.",
-        details: error instanceof Error ? error.message : String(error),
-      },
-      500,
-    );
-  }
+  return c.json({ ok: true, saved: body.prompts.length });
 });
 
 export default app;

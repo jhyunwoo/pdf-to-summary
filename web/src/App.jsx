@@ -1,269 +1,16 @@
 import { useState, useRef, useCallback, useEffect } from "react";
+import PDFDropzone from "./components/PDFDropzone";
 
-/** 백엔드 API 베이스 URL
- *  - 같은 도메인 프록시면 ""로 둠
- *  - 별도 도메인이면 .env에서 VITE_API_BASE 설정 (예: https://api.example.com)
- */
 const API_BASE = "https://pdf-to-summary-api.moveto.workers.dev";
-
 const STORAGE_BASE = "https://pdf-to-summary.moveto.kr";
-
-/** PDF to JPG 변환 API URL
- *  - PDF를 JPG로 변환하는 외부 API
- */
 const PDF_TO_JPG_API = "https://pdf-to-jpg.moveto.kr";
-
 const AI_API = "https://pdf-to-summary-ai.moveto.kr";
 
-// 타임아웃 설정 (밀리초)
-const FETCH_TIMEOUT = 1200000; // 20분 (PDF 변환은 시간이 걸릴 수 있음)
-const AI_TIMEOUT = 600000; // 10분 (AI 분석)
-
-// 타임아웃이 있는 fetch 함수
-const fetchWithTimeout = async (url, options = {}, timeout = FETCH_TIMEOUT) => {
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), timeout);
-
-  try {
-    const response = await fetch(url, {
-      ...options,
-      signal: controller.signal,
-    });
-    clearTimeout(timeoutId);
-    return response;
-  } catch (error) {
-    clearTimeout(timeoutId);
-    if (error.name === "AbortError") {
-      throw new Error(`요청 시간 초과 (${timeout / 1000}초)`);
-    }
-    throw error;
-  }
-};
-
-function PDFDropzone({
-  value = [],
-  onFilesChange,
-  multiple = true,
-  maxSizeMB = 100,
-  className = "",
-}) {
-  const inputRef = useRef(null);
-  const [isDragging, setIsDragging] = useState(false);
-  const [error, setError] = useState("");
-
-  const openFileDialog = () => inputRef.current?.click();
-
-  const validateAndAdd = useCallback(
-    (fileList) => {
-      if (!fileList) {
-        setError("파일을 선택할 수 없습니다.");
-        return;
-      }
-
-      const files = Array.from(fileList || []);
-      if (files.length === 0) {
-        setError("선택된 파일이 없습니다.");
-        return;
-      }
-
-      const accepted = [];
-      const rejected = [];
-      const maxBytes = maxSizeMB * 1024 * 1024;
-
-      files.forEach((f) => {
-        if (!f || !f.name) {
-          rejected.push("유효하지 않은 파일입니다.");
-          return;
-        }
-
-        const isPdf =
-          f.type === "application/pdf" || f.name.toLowerCase().endsWith(".pdf");
-        const okSize = f.size <= maxBytes;
-
-        if (!isPdf) {
-          rejected.push(`${f.name}: PDF만 업로드 가능합니다.`);
-          return;
-        }
-        if (!okSize) {
-          rejected.push(
-            `${f.name}: ${maxSizeMB}MB를 초과합니다 (현재: ${(f.size / 1024 / 1024).toFixed(2)}MB).`,
-          );
-          return;
-        }
-        if (f.size === 0) {
-          rejected.push(`${f.name}: 파일이 비어있습니다.`);
-          return;
-        }
-
-        accepted.push(f);
-      });
-
-      let newFiles = multiple
-        ? [...(Array.isArray(value) ? value : []), ...accepted]
-        : accepted.slice(0, 1);
-
-      // 중복 제거 (name + size + lastModified)
-      const seen = new Set();
-      newFiles = newFiles.filter((f) => {
-        if (!f || !f.name) return false;
-        const key = `${f.name}|${f.size}|${f.lastModified}`;
-        if (seen.has(key)) return false;
-        seen.add(key);
-        return true;
-      });
-
-      if (typeof onFilesChange === "function") {
-        onFilesChange(newFiles);
-      }
-
-      setError(rejected.length > 0 ? rejected.join("\n") : "");
-    },
-    [value, onFilesChange, multiple, maxSizeMB],
-  );
-
-  const onDrop = (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setIsDragging(false);
-    if (e.dataTransfer?.files?.length) {
-      validateAndAdd(e.dataTransfer.files);
-    }
-  };
-  const onDragOver = (e) => {
-    e.preventDefault();
-    e.dataTransfer.dropEffect = "copy";
-  };
-  const onDragEnter = (e) => {
-    e.preventDefault();
-    setIsDragging(true);
-  };
-  const onDragLeave = (e) => {
-    if (e.currentTarget === e.target) setIsDragging(false);
-  };
-
-  const onChange = (e) => {
-    if (e?.target?.files?.length) {
-      validateAndAdd(e.target.files);
-      e.target.value = ""; // 같은 파일 다시 선택 가능하게 초기화
-    }
-  };
-
-  const removeAt = (idx) => {
-    if (typeof onFilesChange === "function" && Array.isArray(value)) {
-      onFilesChange(value.filter((_, i) => i !== idx));
-    }
-  };
-
-  const clearAll = () => {
-    if (typeof onFilesChange === "function") {
-      onFilesChange([]);
-    }
-  };
-
-  return (
-    <div className={`space-y-3 ${className}`}>
-      <div
-        role="button"
-        tabIndex={0}
-        aria-label="PDF 업로드 드래그 앤 드롭 영역"
-        onClick={openFileDialog}
-        onKeyDown={(e) => {
-          if (e.key === "Enter" || e.key === " ") openFileDialog();
-        }}
-        onDrop={onDrop}
-        onDragOver={onDragOver}
-        onDragEnter={onDragEnter}
-        onDragLeave={onDragLeave}
-        className={`flex flex-col items-center justify-center p-8 rounded-2xl border-2 border-dashed transition-all select-none cursor-pointer outline-none
-          ${
-            isDragging
-              ? "border-sky-600 bg-sky-50 ring-4 ring-sky-100"
-              : "border-neutral-300 hover:border-sky-400 bg-neutral-50"
-          }
-        `}
-      >
-        {/* 간단한 업로드 아이콘 (inline SVG) */}
-        <svg
-          xmlns="http://www.w3.org/2000/svg"
-          viewBox="0 0 24 24"
-          fill="currentColor"
-          className="w-10 h-10 text-sky-700"
-        >
-          <path d="M12 16a1 1 0 0 1-1-1V9.41l-1.3 1.3a1 1 0 1 1-1.4-1.42l3-3a1 1 0 0 1 1.4 0l3 3a1 1 0 1 1-1.4 1.42L13 9.4V15a1 1 0 0 1-1 1Zm-7 3a3 3 0 0 1-3-3V9a3 3 0 0 1 3-3h2a1 1 0 1 1 0 2H5a1 1 0 0 0-1 1v7a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1V9a1 1 0 0 0-1-1h-2a1 1 0 1 1 0-2h2a3 3 0 0 1 3 3v7a3 3 0 0 1-3 3H5Z" />
-        </svg>
-        <p className="mt-2 text-sm text-neutral-700">
-          PDF 파일을 드래그 앤 드롭하거나{" "}
-          <span className="text-sky-700 underline">클릭하여 선택</span>
-        </p>
-        <p className="text-xs text-neutral-500">
-          최대 {maxSizeMB}MB · {multiple ? "여러 개 선택 가능" : "1개만 선택"}
-        </p>
-        <input
-          ref={inputRef}
-          type="file"
-          accept="application/pdf"
-          multiple={multiple}
-          className="hidden"
-          onChange={onChange}
-        />
-      </div>
-
-      {error && (
-        <div className="text-sm text-red-700 bg-red-50 border border-red-200 p-2 rounded-md whitespace-pre-wrap">
-          {error}
-        </div>
-      )}
-
-      {Array.isArray(value) && value.length > 0 && (
-        <div className="space-y-2">
-          <div className="flex items-center justify-between">
-            <h3 className="font-semibold">선택된 파일 ({value.length})</h3>
-            <button
-              type="button"
-              onClick={clearAll}
-              className="text-xs px-2 py-1 rounded-md bg-neutral-200 hover:bg-neutral-300"
-            >
-              모두 제거
-            </button>
-          </div>
-          <ul className="space-y-2">
-            {value.map((f, idx) => {
-              if (!f || !f.name) return null;
-
-              return (
-                <li
-                  key={`file-${f.name}-${f.lastModified}-${idx}`}
-                  className="flex items-center justify-between gap-3 p-3 rounded-lg bg-white ring-1 ring-neutral-200"
-                >
-                  <div className="min-w-0">
-                    <p className="text-sm font-medium truncate">{f.name}</p>
-                    <p className="text-xs text-neutral-500">
-                      {((f.size || 0) / 1024 / 1024).toFixed(2)} MB
-                    </p>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => removeAt(idx)}
-                    className="px-2 py-1 rounded-md text-xs bg-red-600 text-white hover:bg-red-700"
-                  >
-                    삭제
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
-        </div>
-      )}
-    </div>
-  );
-}
 
 function App() {
-  const [tok, setTok] = useState([]); // { prompt: string, withImage: boolean }[]
+  const [prompts, setPrompts] = useState([]); // 프롬프트 저장 변수
   const [pdfs, setPdfs] = useState([]); // 드롭존에서 선택된 PDF 목록
-  const composingRef = useRef(false);
   const [withImage, setWithImage] = useState(true); // 이미지 포함 여부 (기본값: true)
-
   const [uploading, setUploading] = useState(false);
   const [uploadResults, setUploadResults] = useState([]);
   const [converting, setConverting] = useState(false);
@@ -279,34 +26,41 @@ function App() {
   const [isLoadingPrompts, setIsLoadingPrompts] = useState(false); // 초기 로드 플래그
   const [isSavingPrompts, setIsSavingPrompts] = useState(false); // 프롬프트 저장 중 플래그
 
+  const composingRef = useRef(false);
+
   const handleSubmit = (e) => {
     try {
       e?.preventDefault();
 
       if (!e?.currentTarget) {
-        console.error("폼 요소를 찾을 수 없습니다");
+        console.error("Form 요소를 찾을 수 없습니다");
         return;
       }
 
+      // 프롬프트 입력 가져오기
       const fd = new FormData(e.currentTarget);
-      const text = (fd.get("tok") || "").toString().trim();
+      const text = (fd.get("prompt") || "").toString().trim();
 
+      // 프롬프트가 비어있으면 리셋하고 종료
       if (!text) {
         e.currentTarget.reset();
         return;
       }
 
-      setTok((prev) => {
-        const newTok = { prompt: text, withImage: Boolean(withImage) };
-        return Array.isArray(prev) ? [...prev, newTok] : [newTok];
+      // 프롬프트 저장
+      setPrompts((prev) => {
+        const newPrompt = { prompt: text, withImage: Boolean(withImage) };
+        return Array.isArray(prev) ? [...prev, newPrompt] : [newPrompt];
       });
 
+      // 프롬프트 입력 초기화
       e.currentTarget.reset();
     } catch (err) {
       console.error("프롬프트 추가 오류:", err);
       alert("프롬프트를 추가하는 중 오류가 발생했습니다.");
     }
   };
+
 
   const handleKeyDown = (e) => {
     if (e?.key === "Enter" && !e.shiftKey && !e.nativeEvent?.isComposing) {
@@ -321,7 +75,7 @@ function App() {
       return;
     }
 
-    setTok((prev) => {
+    setPrompts((prev) => {
       if (!Array.isArray(prev)) return [];
       return prev.filter((_, idx) => idx !== idxToRemove);
     });
@@ -339,6 +93,8 @@ function App() {
       ) {
         // 빈 배열인 경우에도 저장 (전체 삭제)
         try {
+          // TASK 1
+          // 프롬프트 저장 API 요청
           await fetch(`${API_BASE}/prompts`, {
             method: "POST",
             headers: {
@@ -346,7 +102,7 @@ function App() {
             },
             body: JSON.stringify({ prompts: [] }),
           });
-        } catch (err) {
+        } catch (err) { // API 요청에 실패할 경우
           console.error("프롬프트 저장 실패 (빈 배열):", err);
         } finally {
           setIsSavingPrompts(false);
@@ -359,24 +115,13 @@ function App() {
         .map((item) => {
           if (!item) return null;
 
-          // 문자열인 경우
-          if (typeof item === "string") {
-            const trimmed = item.trim();
-            if (!trimmed) return null;
-            return { prompt: trimmed, withImage: true };
-          }
-
-          // 객체인 경우
-          if (typeof item === "object" && "prompt" in item) {
+  
             const promptText = String(item.prompt || "").trim();
             if (!promptText) return null;
             return {
               prompt: promptText,
               withImage: Boolean(item.withImage ?? true),
             };
-          }
-
-          return null;
         })
         .filter((p) => p !== null);
 
@@ -415,6 +160,7 @@ function App() {
       setIsLoadingPrompts(true);
       console.log("📥 저장된 프롬프트 불러오는 중...");
 
+      // 저장된 Prompts를 불러오는 API 요청
       const resp = await fetch(`${API_BASE}/prompts`, {
         method: "GET",
         headers: {
@@ -457,7 +203,7 @@ function App() {
         if (loadedPrompts.length > 0) {
           console.log(`✅ 프롬프트 ${loadedPrompts.length}개 불러옴`);
           console.log(`불러온 프롬프트:`, loadedPrompts);
-          setTok(loadedPrompts);
+          setPrompts(loadedPrompts);
         } else {
           console.log("📭 저장된 프롬프트 없음");
         }
@@ -476,18 +222,18 @@ function App() {
 
   // 프롬프트가 변경될 때마다 자동 저장 (debounce 적용)
   useEffect(() => {
-    // 초기 로드 중이거나 tok가 배열이 아니면 저장하지 않음
-    if (isLoadingPrompts || !Array.isArray(tok)) return;
+    // 초기 로드 중이거나 prompt가 배열이 아니면 저장하지 않음
+    if (isLoadingPrompts || !Array.isArray(prompts)) return;
 
     // 디바운스: 500ms 후에 저장 (빠른 입력 시 여러 번 저장 방지)
     const timeoutId = setTimeout(() => {
-      savePrompts(tok);
+      savePrompts(prompts);
     }, 500);
 
     return () => {
       clearTimeout(timeoutId);
     };
-  }, [tok, savePrompts, isLoadingPrompts]);
+  }, [prompts, savePrompts, isLoadingPrompts]);
 
   // 단일 파일을 R2로 업로드 (PUT /upload/:filename)
   const uploadOneToR2 = async (file) => {
@@ -505,7 +251,7 @@ function App() {
         `📤 업로드 시작: ${file.name} (${(file.size / 1024 / 1024).toFixed(2)} MB)`,
       );
 
-      const resp = await fetchWithTimeout(
+      const resp = await fetch(
         url,
         {
           method: "PUT",
@@ -513,9 +259,8 @@ function App() {
             "Content-Type": "application/pdf",
           },
           body: file,
-        },
-        180000,
-      ); // PDF 업로드는 3분 타임아웃
+        }
+      );
 
       let json = {};
       try {
@@ -594,7 +339,7 @@ function App() {
       console.log(`PDF URL: ${pdfUrl}`);
 
       // PDF to JPG API 호출
-      const resp = await fetchWithTimeout(
+      const resp = await fetch(
         `${PDF_TO_JPG_API}/convert`,
         {
           method: "POST",
@@ -605,9 +350,8 @@ function App() {
             pdfUrl,
             uploadUrl,
           }),
-        },
-        180000,
-      ); // PDF 변환은 3분 타임아웃
+        }
+      );
 
       let json = {};
       try {
@@ -882,7 +626,7 @@ function App() {
 
             // AI API 호출
             try {
-              const resp = await fetchWithTimeout(
+              const resp = await fetch(
                 endpoint,
                 {
                   method: "POST",
@@ -890,8 +634,7 @@ function App() {
                     "Content-Type": "application/json",
                   },
                   body: JSON.stringify(requestBody),
-                },
-                AI_TIMEOUT,
+                }
               );
 
               console.log(`  API 응답 상태: ${resp.status} ${resp.statusText}`);
@@ -1177,7 +920,7 @@ function App() {
     }
 
     // Chain-of-Thought 프롬프트 확인
-    if (!tok || tok.length === 0) {
+    if (!prompts || prompts.length === 0) {
       alert("분석할 프롬프트를 추가해주세요.");
       return;
     }
@@ -1185,7 +928,7 @@ function App() {
     console.log(`\n${"=".repeat(60)}`);
     console.log(`PDF 분석 프로세스 시작`);
     console.log(`PDF 파일 수: ${pdfs.length}`);
-    console.log(`프롬프트 단계: ${tok.length}개`);
+    console.log(`프롬프트 단계: ${prompts.length}개`);
     console.log(`${"=".repeat(60)}\n`);
 
     try {
@@ -1291,7 +1034,7 @@ function App() {
         );
 
         try {
-          const analysisResult = await analyzeWithAI(conversion.imageUrls, tok);
+          const analysisResult = await analyzeWithAI(conversion.imageUrls, prompts);
           aiResults.push({
             filename: conversion.filename,
             pdfKey: conversion.pdfKey,
@@ -1344,7 +1087,7 @@ function App() {
 
         <form onSubmit={handleSubmit} className="space-y-2">
           <textarea
-            name="tok"
+            name="prompt"
             onKeyDown={handleKeyDown}
             onCompositionStart={() => (composingRef.current = true)}
             onCompositionEnd={() => (composingRef.current = false)}
@@ -1371,7 +1114,7 @@ function App() {
               if (composingRef.current) {
                 e.preventDefault();
                 e.currentTarget.form
-                  ?.querySelector('textarea[name="tok"]')
+                  ?.querySelector('textarea[name="prompt"]')
                   ?.blur();
                 requestAnimationFrame(() =>
                   e.currentTarget.form?.requestSubmit(),
@@ -1385,8 +1128,8 @@ function App() {
         </form>
 
         <ul className="space-y-2 list-decimal">
-          {Array.isArray(tok) &&
-            tok.map((item, idx) => {
+          {Array.isArray(prompts) &&
+            prompts.map((item, idx) => {
               if (!item) return null;
 
               // item이 문자열인 경우와 객체인 경우 모두 처리
@@ -1436,7 +1179,7 @@ function App() {
                         ? "bg-gray-400 text-gray-200 cursor-not-allowed"
                         : "bg-red-600 text-white hover:bg-red-700"
                     }`}
-                    aria-label={`ToK ${idx + 1} 삭제`}
+                    aria-label={`Prompt ${idx + 1} 삭제`}
                   >
                     삭제
                   </button>
