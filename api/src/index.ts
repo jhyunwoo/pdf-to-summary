@@ -162,59 +162,7 @@ app.put("/upload-image/:filename", async (c) => {
  * - 응답: { ok: true, prompts: { prompt: string, withImage: boolean }[] }
  */
 app.get("/prompts", async (c) => {
-  try {
-    // 단일 KV 키에서 프롬프트 리스트 가져오기
-    const value = await c.env.pdf_to_summary_kv.get(PROMPTS_LIST_KEY);
-
-    if (value === null) {
-      // 저장된 프롬프트가 없으면 빈 배열 반환
-      return c.json({ ok: true, prompts: [] });
-    }
-
-    try {
-      // JSON 배열로 파싱
-      const parsed = JSON.parse(value) as unknown;
-
-      if (!Array.isArray(parsed)) {
-        // 배열이 아니면 빈 배열 반환
-        return c.json({ ok: true, prompts: [] });
-      }
-
-      // 형식 변환 및 검증: { prompt: string, withImage: boolean }[]
-      const filteredPrompts: Array<{ prompt: string; withImage: boolean }> = [];
-
-      for (const p of parsed) {
-        if (p && typeof p === "object" && p !== null && "prompt" in p) {
-          // 객체 형식: { prompt: string, withImage: boolean }
-          const promptObj = p as { prompt?: unknown; withImage?: unknown };
-          const promptText = promptObj.prompt
-            ? String(promptObj.prompt).trim()
-            : "";
-          if (promptText) {
-            filteredPrompts.push({
-              prompt: promptText,
-              withImage: Boolean(promptObj.withImage ?? true),
-            });
-          }
-        }
-      }
-
-      return c.json({ ok: true, prompts: filteredPrompts });
-    } catch (parseError) {
-      // JSON 파싱 실패 시 빈 배열 반환
-      console.error("프롬프트 파싱 오류:", parseError);
-      return c.json({ ok: true, prompts: [] });
-    }
-  } catch (error) {
-    return c.json(
-      {
-        ok: false,
-        error: "프롬프트를 가져오는 중 오류가 발생했습니다.",
-        details: error instanceof Error ? error.message : String(error),
-      },
-      500,
-    );
-  }
+  
 });
 
 /** POST /prompts
@@ -223,23 +171,7 @@ app.get("/prompts", async (c) => {
  *  - 응답: { ok: true, saved: number }
  */
 app.post("/prompts", async (c) => {
-  // 프롬프트를 json에서 가져옴
-  const body = (await c.req.json().catch(() => null)) as {
-    prompts?: unknown;
-  } | null;
-
-  // 프롬프트 형식이 맞는지 확인
-  if (!body || !Array.isArray(body.prompts)) {
-    return c.json({ error: '"prompts" must be an array' }, 400);
-  }
-
-  // 단일 KV 키에 JSON 배열로 저장
-  await c.env.pdf_to_summary_kv.put(
-    PROMPTS_LIST_KEY,
-    JSON.stringify(body.prompts),
-  );
-
-  return c.json({ ok: true, saved: body.prompts.length });
+  
 });
 
 export default app;
