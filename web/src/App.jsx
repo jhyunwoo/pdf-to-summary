@@ -268,6 +268,7 @@ function App() {
   const [analysisResults, setAnalysisResults] = useState([]);
   const [analysisProgress, setAnalysisProgress] = useState({ current: 0, total: 0, step: 0, totalSteps: 0 });
   const [isLoadingPrompts, setIsLoadingPrompts] = useState(false); // 초기 로드 플래그
+  const [isSavingPrompts, setIsSavingPrompts] = useState(false); // 프롬프트 저장 중 플래그
 
   const handleSubmit = (e) => {
     try {
@@ -319,42 +320,62 @@ function App() {
 
   // 프롬프트를 API에 저장하는 함수
   const savePrompts = useCallback(async (promptItems) => {
-    if (!promptItems || !Array.isArray(promptItems) || promptItems.length === 0) {
-      // 빈 배열인 경우에도 저장 (전체 삭제)
-      try {
-        await fetch(`${API_BASE}/prompts`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({ prompts: [] }),
-        });
-      } catch (err) {
-        console.error("프롬프트 저장 실패 (빈 배열):", err);
-      }
-      return;
-    }
-
+    setIsSavingPrompts(true);
+    
     try {
-      // 프롬프트 텍스트만 추출 (withImage 정보는 저장하지 않음)
-      const promptsText = promptItems.map(item => {
-        if (typeof item === 'string') {
-          return item;
+      if (!promptItems || !Array.isArray(promptItems) || promptItems.length === 0) {
+        // 빈 배열인 경우에도 저장 (전체 삭제)
+        try {
+          await fetch(`${API_BASE}/prompts`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ prompts: [] }),
+          });
+        } catch (err) {
+          console.error("프롬프트 저장 실패 (빈 배열):", err);
+        } finally {
+          setIsSavingPrompts(false);
         }
-        if (item && typeof item === 'object' && 'prompt' in item) {
-          return item.prompt;
-        }
-        return String(item || "").trim();
-      }).filter(p => p && p.length > 0);
+        return;
+      }
 
-      console.log(`💾 프롬프트 저장 중... (${promptsText.length}개)`);
+      // 전체 프롬프트 객체를 정제하여 저장 (withImage 정보 포함)
+      const promptsToSave = promptItems
+        .map(item => {
+          if (!item) return null;
+          
+          // 문자열인 경우
+          if (typeof item === 'string') {
+            const trimmed = item.trim();
+            if (!trimmed) return null;
+            return { prompt: trimmed, withImage: true };
+          }
+          
+          // 객체인 경우
+          if (typeof item === 'object' && 'prompt' in item) {
+            const promptText = String(item.prompt || "").trim();
+            if (!promptText) return null;
+            return {
+              prompt: promptText,
+              withImage: Boolean(item.withImage ?? true),
+            };
+          }
+          
+          return null;
+        })
+        .filter((p) => p !== null);
+
+      console.log(`💾 프롬프트 저장 중... (${promptsToSave.length}개)`);
+      console.log(`저장할 프롬프트:`, promptsToSave);
       
       const resp = await fetch(`${API_BASE}/prompts`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ prompts: promptsText }),
+        body: JSON.stringify({ prompts: promptsToSave }),
       });
 
       if (!resp.ok) {
@@ -370,6 +391,8 @@ function App() {
     } catch (err) {
       console.error("프롬프트 저장 중 오류:", err);
       // 저장 실패해도 사용자 경험에 영향 없도록 조용히 처리
+    } finally {
+      setIsSavingPrompts(false);
     }
   }, []);
 
@@ -396,14 +419,31 @@ function App() {
       const result = await resp.json().catch(() => null);
       if (result?.ok && Array.isArray(result.prompts)) {
         const loadedPrompts = result.prompts
-          .filter((p) => p && typeof p === 'string' && p.trim().length > 0)
-          .map((promptText) => ({
-            prompt: promptText.trim(),
-            withImage: true, // 기본값: 이미지 포함 (기존 저장된 프롬프트는 이미지 포함으로 가정)
-          }));
+          .map((p) => {
+            // 문자열 형식 (하위 호환성)
+            if (typeof p === 'string') {
+              const trimmed = p.trim();
+              return trimmed ? { prompt: trimmed, withImage: true } : null;
+            }
+            
+            // 객체 형식: { prompt: string, withImage: boolean }
+            if (p && typeof p === 'object' && 'prompt' in p) {
+              const promptText = String(p.prompt || "").trim();
+              if (!promptText) return null;
+              
+              return {
+                prompt: promptText,
+                withImage: Boolean(p.withImage ?? true),
+              };
+            }
+            
+            return null;
+          })
+          .filter((p) => p !== null);
         
         if (loadedPrompts.length > 0) {
           console.log(`✅ 프롬프트 ${loadedPrompts.length}개 불러옴`);
+          console.log(`불러온 프롬프트:`, loadedPrompts);
           setTok(loadedPrompts);
         } else {
           console.log("📭 저장된 프롬프트 없음");
@@ -1266,6 +1306,21 @@ function App() {
           {Array.isArray(tok) && tok.map((item, idx) => {
             if (!item) return null;
             
+            // item이 문자열인 경우와 객체인 경우 모두 처리
+            const promptText = typeof item === 'string' 
+              ? item.trim() 
+              : (item && typeof item === 'object' && 'prompt' in item 
+                  ? String(item.prompt || "").trim() 
+                  : String(item || "").trim());
+            
+            const withImage = typeof item === 'string'
+              ? true // 기본값
+              : (item && typeof item === 'object' && 'withImage' in item
+                  ? Boolean(item.withImage)
+                  : true); // 기본값
+            
+            if (!promptText) return null;
+            
             return (
               <li
                 key={`prompt-${idx}`}
@@ -1274,9 +1329,9 @@ function App() {
                 <div className="flex-1">
                   <div className="flex items-center gap-2">
                     <span className="whitespace-pre-wrap break-words font-semibold">
-                      {idx + 1}. {item.prompt || "(내용 없음)"}
+                      {idx + 1}. {promptText}
                     </span>
-                    {item.withImage ? (
+                    {withImage ? (
                       <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800">
                         🖼️ 이미지
                       </span>
@@ -1290,7 +1345,12 @@ function App() {
                 <button
                   type="button"
                   onClick={() => handleRemove(idx)}
-                  className="px-2 py-1 rounded-md text-xs bg-red-600 text-white hover:bg-red-700"
+                  disabled={isSavingPrompts}
+                  className={`px-2 py-1 rounded-md text-xs ${
+                    isSavingPrompts
+                      ? "bg-gray-400 text-gray-200 cursor-not-allowed"
+                      : "bg-red-600 text-white hover:bg-red-700"
+                  }`}
                   aria-label={`ToK ${idx + 1} 삭제`}
                 >
                   삭제

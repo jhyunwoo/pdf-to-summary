@@ -9,7 +9,8 @@ type Bindings = {
   PUBLIC_URL?: string; // R2 public URL (선택사항, 예: https://your-domain.com)
 };
 
-const KV_PREFIX = "prompt:";
+const KV_PREFIX = "prompt:"; // 하위 호환성을 위해 유지 (마이그레이션용)
+const PROMPTS_LIST_KEY = "prompts:list"; // 단일 KV 키
 
 const app = new Hono<{ Bindings: Bindings }>();
 
@@ -354,71 +355,54 @@ app.get("/pdf/*", async (c) => {
  */
 app.get("/prompts", async (c) => {
   try {
-    const prompts: Array<{ prompt: string; withImage: boolean }> = [];
-    let cursor: string | undefined = undefined;
+    // 단일 KV 키에서 프롬프트 리스트 가져오기
+    const value = await c.env.pdf_to_summary_kv.get(PROMPTS_LIST_KEY);
+    
+    if (value === null) {
+      // 저장된 프롬프트가 없으면 빈 배열 반환
+      return c.json({ ok: true, prompts: [] });
+    }
 
-    // KV에서 모든 프롬프트 가져오기
-    do {
-      const batch: KVNamespaceListResult<unknown, string> =
-        await c.env.pdf_to_summary_kv.list({
-          prefix: KV_PREFIX,
-          cursor,
-        });
+    try {
+      // JSON 배열로 파싱
+      const parsed = JSON.parse(value) as unknown;
+      
+      if (!Array.isArray(parsed)) {
+        // 배열이 아니면 빈 배열 반환
+        return c.json({ ok: true, prompts: [] });
+      }
 
-      // 키를 숫자로 정렬하여 순서대로 가져오기
-      const sortedKeys = batch.keys
-        .map((k) => {
-          const numStr = k.name.replace(KV_PREFIX, "");
-          const num = parseInt(numStr, 10);
-          return { key: k.name, num, value: null };
-        })
-        .filter((item) => !isNaN(item.num))
-        .sort((a, b) => a.num - b.num);
-
-      // 각 키의 값을 가져오기
-      for (const item of sortedKeys) {
-        const value = await c.env.pdf_to_summary_kv.get(item.key);
-        if (value !== null) {
-          try {
-            // JSON 형식으로 저장된 경우 파싱
-            const parsed = JSON.parse(value) as {
-              prompt?: string;
-              withImage?: boolean;
-            };
-            
-            if (parsed && typeof parsed === 'object' && parsed.prompt) {
-              // 새 형식: { prompt: string, withImage: boolean }
-              prompts[item.num] = {
-                prompt: String(parsed.prompt),
-                withImage: Boolean(parsed.withImage ?? true),
-              };
-            } else {
-              // 이전 형식 (문자열만 저장된 경우) - 하위 호환성
-              prompts[item.num] = {
-                prompt: typeof value === 'string' ? value : String(value),
-                withImage: true, // 기본값
-              };
-            }
-          } catch {
-            // JSON 파싱 실패 시 문자열로 처리 (하위 호환성)
-            prompts[item.num] = {
-              prompt: String(value),
-              withImage: true, // 기본값
-            };
+      // 형식 변환 및 검증
+      const filteredPrompts: Array<{ prompt: string; withImage: boolean }> = [];
+      
+      for (const p of parsed) {
+        if (typeof p === 'string') {
+          // 문자열 형식 (하위 호환성)
+          const trimmed = p.trim();
+          if (trimmed) {
+            filteredPrompts.push({ prompt: trimmed, withImage: true });
+          }
+        } else if (p && typeof p === 'object' && p !== null && 'prompt' in p) {
+          // 객체 형식: { prompt: string, withImage: boolean }
+          const promptObj = p as { prompt?: unknown; withImage?: unknown };
+          const promptText = promptObj.prompt
+            ? String(promptObj.prompt).trim()
+            : "";
+          if (promptText) {
+            filteredPrompts.push({
+              prompt: promptText,
+              withImage: Boolean(promptObj.withImage ?? true),
+            });
           }
         }
       }
 
-      cursor = batch.list_complete ? undefined : batch.cursor;
-    } while (cursor);
-
-    // undefined 제거하고 배열로 변환 (인덱스 순서대로)
-    const filteredPrompts = prompts
-      .map((p, idx) => (p !== null && p !== undefined ? { ...p, index: idx } : null))
-      .filter((p) => p !== null)
-      .map((p) => ({ prompt: p!.prompt, withImage: p!.withImage }));
-
-    return c.json({ ok: true, prompts: filteredPrompts });
+      return c.json({ ok: true, prompts: filteredPrompts });
+    } catch (parseError) {
+      // JSON 파싱 실패 시 빈 배열 반환
+      console.error("프롬프트 파싱 오류:", parseError);
+      return c.json({ ok: true, prompts: [] });
+    }
   } catch (error) {
     return c.json(
       {
@@ -432,8 +416,8 @@ app.get("/prompts", async (c) => {
 });
 
 /** POST /prompts
- *  - 기존 전체 삭제 후 새 리스트로 저장(리셋)
- *  - body: { prompts: string[] }
+ *  - 단일 KV 키에 프롬프트 리스트를 JSON 배열로 저장
+ *  - body: { prompts: { prompt: string, withImage: boolean }[] } 또는 { prompts: string[] } (하위 호환)
  *  - 응답: { ok: true, deleted: number, saved: number }
  */
 app.post("/prompts", async (c) => {
@@ -441,10 +425,10 @@ app.post("/prompts", async (c) => {
     prompts?: unknown;
   } | null;
   if (!body || !Array.isArray(body.prompts)) {
-    return c.json({ error: '"prompts" must be an array of strings' }, 400);
+    return c.json({ error: '"prompts" must be an array' }, 400);
   }
 
-  // 1) 전체 삭제
+  // 1) 기존 개별 KV 키들 삭제 (하위 호환성 및 마이그레이션)
   let deleted = 0;
   let cursor: string | undefined = undefined;
   do {
@@ -462,15 +446,45 @@ app.post("/prompts", async (c) => {
     cursor = batch.list_complete ? undefined : batch.cursor;
   } while (cursor);
 
-  // 2) 새 리스트 저장
-  const list = body.prompts.map((p) => String(p ?? "").trim());
-  await Promise.all(
-    list.map((text, idx) =>
-      c.env.pdf_to_summary_kv.put(`${KV_PREFIX}${idx}`, text),
-    ),
+  // 2) 형식 변환 및 검증: { prompt: string, withImage: boolean }[] 또는 string[]
+  const promptsToSave = body.prompts
+    .map((p) => {
+      if (typeof p === 'string') {
+        // 문자열만 있는 경우 (하위 호환성)
+        const trimmed = p.trim();
+        return trimmed ? { prompt: trimmed, withImage: true } : null;
+      } else if (p && typeof p === 'object') {
+        // 객체 형식
+        const promptObj = p as { prompt?: unknown; withImage?: unknown };
+        const promptText = promptObj.prompt
+          ? String(promptObj.prompt).trim()
+          : String(p).trim();
+        
+        if (!promptText) {
+          return null;
+        }
+        
+        return {
+          prompt: promptText,
+          withImage: Boolean(promptObj.withImage ?? true),
+        };
+      } else {
+        const trimmed = String(p ?? "").trim();
+        return trimmed ? { prompt: trimmed, withImage: true } : null;
+      }
+    })
+    .filter((p) => p !== null && p.prompt && p.prompt.length > 0) as Array<{
+      prompt: string;
+      withImage: boolean;
+    }>;
+
+  // 3) 단일 KV 키에 JSON 배열로 저장
+  await c.env.pdf_to_summary_kv.put(
+    PROMPTS_LIST_KEY,
+    JSON.stringify(promptsToSave),
   );
 
-  return c.json({ ok: true, deleted, saved: list.length });
+  return c.json({ ok: true, deleted, saved: promptsToSave.length });
 });
 
 /**
