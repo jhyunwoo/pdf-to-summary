@@ -1,0 +1,60 @@
+{
+	"$schema": "node_modules/wrangler/config-schema.json",
+	"name": "pdf-to-summary-api",
+	"main": "src/index.ts",
+	"compatibility_date": "2025-10-30",
+	"r2_buckets": [
+		{
+			"bucket_name": "pdf-to-summary",
+			"binding": "pdf_to_summary",
+			"remote": true
+		}
+	],
+	"d1_databases": [
+		{
+			"binding": "pdf_to_summary_db",
+			"database_name": "pdf-to-summary-db",
+			"database_id": "9abeb99b-51af-4178-aa70-3eff1976b095",
+			"remote": true
+		}
+	],
+	"kv_namespaces": [
+		{
+			"binding": "pdf_to_summary_kv",
+			"id": "52aff359cf1141cb951f15f2fb44d43b",
+			"remote": true
+		}
+	],
+	"vars": {
+	  "PUBLIC_URL": "https://pdf-to-summary.moveto.kr"
+	},
+	// "compatibility_flags": [
+	//   "nodejs_compat"
+	// ],
+	// "kv_namespaces": [
+	//   {
+	//     "binding": "MY_KV_NAMESPACE",
+	//     "id": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+	//   }
+	// ],
+	// "r2_buckets": [
+	//   {
+	//     "binding": "MY_BUCKET",
+	//     "bucket_name": "my-bucket"
+	//   }
+	// ],
+	// "d1_databases": [
+	//   {
+	//     "binding": "MY_DB",
+	//     "database_name": "my-database",
+	//     "database_id": ""
+	//   }
+	// ],
+	// "ai": {
+	//   "binding": "AI"
+	// },
+	// "observability": {
+	//   "enabled": true,
+	//   "head_sampling_rate": 1
+	// }
+}
