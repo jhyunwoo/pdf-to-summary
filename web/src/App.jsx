@@ -86,6 +86,7 @@ function App() {
     setIsSavingPrompts(true);
 
     try {
+      // 프롬프트가 비어 있을 경우 처리
       if (
         !promptItems ||
         !Array.isArray(promptItems) ||
@@ -93,8 +94,7 @@ function App() {
       ) {
         // 빈 배열인 경우에도 저장 (전체 삭제)
         try {
-          // TASK 1
-          // 프롬프트 저장 API 요청
+          // TASK 1 프롬프트를 초기화하는 요청
           await fetch(`${API_BASE}/prompts`, {
             method: "POST",
             headers: {
@@ -102,6 +102,7 @@ function App() {
             },
             body: JSON.stringify({ prompts: [] }),
           });
+
         } catch (err) { // API 요청에 실패할 경우
           console.error("프롬프트 저장 실패 (빈 배열):", err);
         } finally {
@@ -114,8 +115,6 @@ function App() {
       const promptsToSave = promptItems
         .map((item) => {
           if (!item) return null;
-
-  
             const promptText = String(item.prompt || "").trim();
             if (!promptText) return null;
             return {
@@ -128,6 +127,7 @@ function App() {
       console.log(`💾 프롬프트 저장 중... (${promptsToSave.length}개)`);
       console.log(`저장할 프롬프트:`, promptsToSave);
 
+      // TASK 2 프롬프트를 저장하는 요청
       const resp = await fetch(`${API_BASE}/prompts`, {
         method: "POST",
         headers: {
@@ -160,7 +160,7 @@ function App() {
       setIsLoadingPrompts(true);
       console.log("📥 저장된 프롬프트 불러오는 중...");
 
-      // 저장된 Prompts를 불러오는 API 요청
+      // TASK 3 기존에 저장된 프롬프트를 불러오는 요청
       const resp = await fetch(`${API_BASE}/prompts`, {
         method: "GET",
         headers: {
