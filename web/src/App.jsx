@@ -95,13 +95,7 @@ function App() {
         try {
           // TASK 1
           // 프롬프트 저장 API 요청
-          await fetch(`${API_BASE}/prompts`, {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({ prompts: [] }),
-          });
+          
         } catch (err) { // API 요청에 실패할 경우
           console.error("프롬프트 저장 실패 (빈 배열):", err);
         } finally {
@@ -128,13 +122,8 @@ function App() {
       console.log(`💾 프롬프트 저장 중... (${promptsToSave.length}개)`);
       console.log(`저장할 프롬프트:`, promptsToSave);
 
-      const resp = await fetch(`${API_BASE}/prompts`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ prompts: promptsToSave }),
-      });
+      // TASK 2 프롬프트 저장 API 요청
+      
 
       if (!resp.ok) {
         const errorText = await resp.text().catch(() => "알 수 없는 오류");
@@ -160,13 +149,9 @@ function App() {
       setIsLoadingPrompts(true);
       console.log("📥 저장된 프롬프트 불러오는 중...");
 
+      // TASK 3
       // 저장된 Prompts를 불러오는 API 요청
-      const resp = await fetch(`${API_BASE}/prompts`, {
-        method: "GET",
-        headers: {
-          "Content-Type": "application/json",
-        },
-      });
+      
 
       if (!resp.ok) {
         const errorText = await resp.text().catch(() => "알 수 없는 오류");
