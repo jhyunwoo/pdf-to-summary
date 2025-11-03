@@ -6,7 +6,6 @@ const STORAGE_BASE = "https://pdf-to-summary.moveto.kr";
 const PDF_TO_JPG_API = "https://pdf-to-jpg.moveto.kr";
 const AI_API = "https://pdf-to-summary-ai.moveto.kr";
 
-
 function App() {
   const [prompts, setPrompts] = useState([]); // 프롬프트 저장 변수
   const [pdfs, setPdfs] = useState([]); // 드롭존에서 선택된 PDF 목록
@@ -61,7 +60,6 @@ function App() {
     }
   };
 
-
   const handleKeyDown = (e) => {
     if (e?.key === "Enter" && !e.shiftKey && !e.nativeEvent?.isComposing) {
       e.preventDefault();
@@ -95,8 +93,8 @@ function App() {
         try {
           // TASK 1
           // 프롬프트 저장 API 요청
-          
-        } catch (err) { // API 요청에 실패할 경우
+        } catch (err) {
+          // API 요청에 실패할 경우
           console.error("프롬프트 저장 실패 (빈 배열):", err);
         } finally {
           setIsSavingPrompts(false);
@@ -109,13 +107,12 @@ function App() {
         .map((item) => {
           if (!item) return null;
 
-  
-            const promptText = String(item.prompt || "").trim();
-            if (!promptText) return null;
-            return {
-              prompt: promptText,
-              withImage: Boolean(item.withImage ?? true),
-            };
+          const promptText = String(item.prompt || "").trim();
+          if (!promptText) return null;
+          return {
+            prompt: promptText,
+            withImage: Boolean(item.withImage ?? true),
+          };
         })
         .filter((p) => p !== null);
 
@@ -123,7 +120,6 @@ function App() {
       console.log(`저장할 프롬프트:`, promptsToSave);
 
       // TASK 2 프롬프트 저장 API 요청
-      
 
       if (!resp.ok) {
         const errorText = await resp.text().catch(() => "알 수 없는 오류");
@@ -151,7 +147,6 @@ function App() {
 
       // TASK 3
       // 저장된 Prompts를 불러오는 API 요청
-      
 
       if (!resp.ok) {
         const errorText = await resp.text().catch(() => "알 수 없는 오류");
@@ -236,16 +231,13 @@ function App() {
         `📤 업로드 시작: ${file.name} (${(file.size / 1024 / 1024).toFixed(2)} MB)`,
       );
 
-      const resp = await fetch(
-        url,
-        {
-          method: "PUT",
-          headers: {
-            "Content-Type": "application/pdf",
-          },
-          body: file,
-        }
-      );
+      const resp = await fetch(url, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/pdf",
+        },
+        body: file,
+      });
 
       let json = {};
       try {
@@ -324,19 +316,16 @@ function App() {
       console.log(`PDF URL: ${pdfUrl}`);
 
       // PDF to JPG API 호출
-      const resp = await fetch(
-        `${PDF_TO_JPG_API}/convert`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            pdfUrl,
-            uploadUrl,
-          }),
-        }
-      );
+      const resp = await fetch(`${PDF_TO_JPG_API}/convert`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          pdfUrl,
+          uploadUrl,
+        }),
+      });
 
       let json = {};
       try {
@@ -893,7 +882,6 @@ function App() {
               </ul>
             </div>
           )}
-
         </section>
       </div>
     </div>

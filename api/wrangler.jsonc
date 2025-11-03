@@ -3,20 +3,6 @@
   "name": "pdf-to-summary-api",
   "main": "src/index.ts",
   "compatibility_date": "2025-10-30",
-  "r2_buckets": [
-    {
-      "bucket_name": "pdf-to-summary",
-      "binding": "pdf_to_summary",
-      "remote": true,
-    },
-  ],
-  "kv_namespaces": [
-    {
-      "binding": "pdf_to_summary_kv",
-      "id": "52aff359cf1141cb951f15f2fb44d43b",
-      "remote": true,
-    },
-  ],
   "vars": {
     "PUBLIC_URL": "https://pdf-to-summary.moveto.kr",
   },
