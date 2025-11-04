@@ -26,7 +26,6 @@ app.use(
   }),
 );
 
-
 /**
  * PDF 업로드 (RAW 바디 스트리밍 업로드)
  * - 요청: PUT /upload/:filename
@@ -36,7 +35,7 @@ app.use(
 app.put("/upload/:filename", async (c) => {
   const filename = c.req.param("filename");
 
-  if(!filename){
+  if (!filename) {
     return c.json({ error: "파일명이 제공되지 않았습니다." }, 400);
   }
 
@@ -56,7 +55,6 @@ app.put("/upload/:filename", async (c) => {
   if (!body) {
     return c.json({ error: "요청 바디가 비었습니다." }, 400);
   }
-
 
   // 파일 키 생성
   const key = buildKey(filename);
@@ -96,9 +94,9 @@ app.put("/upload-image/:filename", async (c) => {
   const filename = c.req.param("filename");
 
   // 파일명이 존재하지 않을 경우 오류 처리
-  if(!filename){
+  if (!filename) {
     return c.json({ error: "파일명이 제공되지 않았습니다." }, 400);
-  } 
+  }
 
   // 파일 타입 확인
   const ct = c.req.header("content-type") || "";
