@@ -1,6 +1,4 @@
-const STORAGE_BASE = "https://pdf-to-summary.moveto.kr";
-const PDF_TO_JPG_API = "https://pdf-to-jpg.moveto.kr";
-const API_BASE = "https://pdf-to-summary-api.moveto.workers.dev";
+import { API_BASE, STORAGE_BASE, PDF_TO_JPG_API } from "./variables";
 
 // 이미지 URL 검증 함수
 function validateImageUrl(imageUrl) {

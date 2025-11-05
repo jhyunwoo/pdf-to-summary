@@ -1,4 +1,4 @@
-const API_BASE = "https://pdf-to-summary-api.moveto.workers.dev";
+import { API_BASE } from "./variables";
 
 // 프롬프트를 API에 저장하는 함수
 export async function savePrompts(promptItems) {

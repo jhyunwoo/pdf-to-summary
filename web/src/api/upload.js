@@ -1,4 +1,4 @@
-const API_BASE = "https://pdf-to-summary-api.moveto.workers.dev";
+import { API_BASE } from "./variables";
 
 // 단일 파일을 R2로 업로드 (PUT /upload/:filename)
 export async function uploadOneToR2(file) {

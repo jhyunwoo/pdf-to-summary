@@ -1,6 +1,5 @@
 import { validateImageUrl } from "./convert";
-
-const AI_API = "https://pdf-to-summary-ai.moveto.kr";
+import { API_BASE } from "./variables";
 
 // AI 분석 함수 (Chain-of-Thought)
 export async function analyzeWithAI(imageUrls, promptItems, onProgress) {
