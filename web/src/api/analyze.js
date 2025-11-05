@@ -1,5 +1,5 @@
 import { validateImageUrl } from "./convert";
-import { API_BASE } from "./variables";
+import { AI_API } from "./variables";
 
 // AI 분석 함수 (Chain-of-Thought)
 export async function analyzeWithAI(imageUrls, promptItems, onProgress) {
