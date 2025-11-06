@@ -1,5 +1,5 @@
 import { validateImageUrl } from "./convert";
-import { AI_API } from "./variables";
+import { getAiApi } from "./variables";
 
 // AI 분석 함수 (Chain-of-Thought)
 export async function analyzeWithAI(imageUrls, promptItems, onProgress) {
@@ -102,7 +102,7 @@ export async function analyzeWithAI(imageUrls, promptItems, onProgress) {
 
           if (needsImage && imageUrl) {
             // 이미지와 함께 요청 (ImageUrlRequest)
-            endpoint = `${AI_API}/api/generate`;
+            endpoint = `${getAiApi()}/api/generate`;
             requestBody = {
               image_url: imageUrl,
               prompt: enhancedPrompt,
@@ -112,7 +112,7 @@ export async function analyzeWithAI(imageUrls, promptItems, onProgress) {
             console.log(`  엔드포인트: /api/generate (이미지 포함)`);
           } else {
             // 텍스트만 요청 (TextPromptRequest)
-            endpoint = `${AI_API}/api/generate/text`;
+            endpoint = `${getAiApi()}/api/generate/text`;
             requestBody = {
               prompt: enhancedPrompt,
               temperature: 0.7,
